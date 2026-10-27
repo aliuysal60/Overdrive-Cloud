@@ -2,24 +2,23 @@
   <img src="app/src/main/assets/web/shared/app-icon-ios.webp" width="120" alt="OverDrive Logo">
 </p>
 
-<h1 align="center">OverDrive</h1>
-<p align="center">Advanced Sentry Mode for BYD Vehicles</p>
+<h1 align="center">OverDrive Cloud</h1>
+<p align="center">OverDrive fixed for the BYD Tang and Sealion 7 (DiLink 5, 51.1.x firmware)</p>
 <p align="center">
-  <a href="https://github.com/yash-srivastava/Overdrive-release/releases/tag/alpha">Download Alpha</a> •
-  <a href="https://www.overdrive.qd.je">Website</a> •
-  <a href="https://discord.gg/PZutk9fg4h">Discord</a> •
-  <a href="#features">Features</a> •
+  <a href="https://github.com/aliuysal60/Overdrive-Cloud/releases/latest">Download APK</a> •
+  <a href="https://overdrive.cloud.solucharger.com">Website</a> •
+  <a href="#whats-different-in-this-fork">What's different</a> •
   <a href="#quick-start-use-pre-built-apk">Setup Guide</a> •
-  <a href="#home-assistant-integration">Home Assistant</a> •
-  <a href="#translations">Translate</a>
-</p>
-<p align="center">
-  <a href="https://crowdin.com/project/overdrive">
-    <img src="https://badges.crowdin.net/overdrive/localized.svg" alt="Crowdin localization status">
-  </a>
+  <a href="#overdrive-cloud">OverDrive Cloud</a> •
+  <a href="#features">Features</a> •
+  <a href="#home-assistant-integration">Home Assistant</a>
 </p>
 
-Free, open-source dashcam and sentry mode app built specifically for BYD vehicles with DiLink v3. All data stays on your device — no cloud, no accounts, no subscriptions.
+A fork of [OverDrive](https://github.com/yash-srivastava/Overdrive-release) — the free, open-source dashcam and sentry mode app for BYD vehicles — built specifically for the **BYD Tang and BYD Sealion 7 on 51.1.x firmware** (DiLink 5, Qualcomm 8155). It works on other BYD models too.
+
+This build fixes every OverDrive bug seen on these cars, keeps **sentry mode running without the head unit ever going to sleep** while using very little battery, and adds **OverDrive Cloud**: reach your car from your phone anywhere, get its alerts and update the app remotely, with nothing to configure. Recordings stay on the car; the cloud is optional.
+
+> 🇹🇷 **Türkçe:** BYD Tang ve Sealion 7'nin 51.1.x yazılımları için düzeltilmiş OverDrive çatalı. Diğer BYD modellerinde de çalışır. Tüm hatalar düzeltildi; bekçi modu ünite hiç uyumadan, az pil harcayarak çalışır. Kurulum ve sürüm geçmişi: [overdrive.cloud.solucharger.com](https://overdrive.cloud.solucharger.com)
 
 ---
 
@@ -34,25 +33,50 @@ Free, open-source dashcam and sentry mode app built specifically for BYD vehicle
 ---
 
 
+## What's different in this fork
+
+- **Made for the Tang and Sealion 7 (51.1.x)** — gear, speed and ignition detection, 12 V battery reading, camera recording, recovery of interrupted recordings and the app watchdog all work on DiLink 5.
+- **Sentry mode that never sleeps** — the head unit stays awake while parked, so sentry mode watches the car 24/7 while using very little battery (see [Parked Keep-Alive](#parked-keep-alive-on-dilink-5-sleep-prevention)).
+- **No ADB needed to install** on the Tang and Sealion 7 — install from a USB drive.
+- **[OverDrive Cloud](#overdrive-cloud)** — the car enrolls itself, you add it to your phone with a QR code and open it from anywhere. Google sign-in, alerts on your phone, family sharing.
+- **Remote updates** — "Update available" shows in the car app, in the car's web interface and on your phone; one tap downloads, verifies (SHA-256) and installs the new version.
+- **In-app downloads** — recordings download inside the web app with progress and cancel; on iPhone the finished file opens the share sheet ("Save Video") instead of a full-screen preview you can't leave.
+
+Release notes for this fork: [RELEASE_NOTES.md](RELEASE_NOTES.md) (Turkish) and the [Releases page](https://github.com/aliuysal60/Overdrive-Cloud/releases).
+
 ## Quick Start (Use Pre-built APK)
 
-Download the latest APK from [GitHub Releases](https://github.com/yash-srivastava/Overdrive-release/releases/tag/alpha) and install it directly on your BYD head unit.
+Download the latest APK from [Releases](https://github.com/aliuysal60/Overdrive-Cloud/releases/latest) or from [overdrive.cloud.solucharger.com](https://overdrive.cloud.solucharger.com).
 
-### 1. Prerequisites
-- Ensure **Wireless ADB** is enabled on your device before launching the app.
+### 1. Install from a USB drive
+
+1. Format a USB flash drive as **FAT32**.
+2. Create a folder named `Third Party Apps <country-code>` on it (e.g. `Third Party Apps 90` — 90 is Turkey's country code). Use your own country's code.
+3. Put the APK (`OverDrive-<version>.apk`) inside that folder:
+   ```
+   USB (FAT32)
+   └── Third Party Apps 90/
+       └── OverDrive-57.0.4.apk
+   ```
+4. Plug the drive into the car and install the APK from it. The password for installing third-party apps is `BYD8155F`.
+
+The USB install applies to BYD Global units on the 8155 chipset (51.x firmware). Tested on a Tang 2025 (firmware 51.1.2.2411280.1).
+
+> **Coming from the upstream OverDrive?** This build is signed with a different key, so uninstall the upstream app first (`adb uninstall com.overdrive.app` or from the car's app list). Your settings under `/data/local/tmp` are kept.
 
 ### 2. Initial Configuration
-1. **Authorize ADB:** On first launch, accept the ADB authentication prompt on your device screen.
+1. **Permissions:** Open the app and grant the permissions it asks for. On the **Tang and Sealion 7 you do not need to enable ADB** on the unit. Other models may need Wireless ADB enabled — accept the ADB authentication prompt on first launch.
 2. **Background Persistence:** In Settings, ensure the **"Disable Autostart"** toggle is **unchecked**. This is critical for reliable background operation.
 
-> ⚠️ **CRITICAL: Hard Reboot Required**
-> After the first installation and initial run, you must hard reboot the device:
+> ⚠️ **Hard Reboot After the First Install**
+> After the first installation and initial run, hard reboot the head unit:
 > Press and hold the **Volume Down** button for 5 seconds. Wait for the system to fully restart.
-> This step is necessary to finalize the installation.
 
-### 3. Network & Tunnel Setup
+### 3. Add the car to your phone
 
-Enable your preferred tunnel (Zrok, Cloudflared or Tailscale).
+Once the car is online (Wi-Fi or 4G) it enrolls with OverDrive Cloud within a minute. In the app, tap **OverDrive Cloud (FRP)** in the daemon list to show the QR code, then open [My cars](https://byd-gw.cloud.solucharger.com/gw/) on your phone, sign in with Google and scan it. Add My cars to your home screen to use it like an app. Details: [OverDrive Cloud](#overdrive-cloud).
+
+Prefer your own tunnel? Zrok, Cloudflared, Tailscale and WireGuard still work — see [Remote Access](#remote-access).
 
 ### Telegram Notifications Setup
 1. Message [@BotFather](https://t.me/BotFather) on Telegram → `/newbot` → follow prompts → get your bot token
@@ -69,10 +93,11 @@ Enable your preferred tunnel (Zrok, Cloudflared or Tailscale).
 | Proximity Recording | ✅ Market First | ❌ |
 | Real-time Performance Monitor | ✅ Built-in | ❌ |
 | ISP Blocklist Bypass | ✅ Via BYD SIM | ❌ Requires WiFi Hotspot |
-| Remote Access | 4 methods (LAN, Cloudflared, Zrok, Tailscale), plus WireGuard for private services | Usually 1 (if any) |
+| Remote Access | OverDrive Cloud (zero setup) plus 4 tunnels (LAN, Cloudflared, Zrok, Tailscale) and WireGuard for private services | Usually 1 (if any) |
+| Remote Updates | ✅ From the car, its web interface or your phone | ❌ |
 | ADB Shell Runner | ✅ | ❌ |
 | Telegram Notifications | ✅ Free | Paid or None |
-| Data Privacy | 100% On-Device | Often Cloud-Required |
+| Data Privacy | Recordings stay on the car; cloud optional and stores no camera, location or vehicle data | Often Cloud-Required |
 | Price | **Free Forever** | $5–50/month |
 
 ## Features
@@ -81,15 +106,30 @@ Enable your preferred tunnel (Zrok, Cloudflared or Tailscale).
 - **Proximity Recording (Market First)** — Uses BYD's 8 parking radar sensors to trigger recording only when objects approach. Configurable trigger levels, pre-event buffer, and 500ms debouncing.
 - **Advanced Sentry Mode** — 24/7 surveillance with motion detection and AI object recognition
 - **Parked Keep-Alive (DiLink 5)** — Keeps the head unit awake while parked via OEM OTA-style CAN Network Management, so sentry/recording survives the vehicle's deep sleep. 12 V battery guard with configurable cutoff.
+- **OverDrive Cloud** — Reach the car from your phone anywhere: automatic enrollment, QR pairing, Google sign-in, push alerts and family sharing
+- **Remote Updates** — One-tap updates from the car app, the car's web interface or your phone, verified with SHA-256 before install
 - **Real-time Performance Monitor** — CPU, GPU, memory usage, and battery voltage dashboard
 - **ISP Blocklist Bypass** — Browse via BYD's built-in SIM card without a dedicated hotspot
 - **ADB Shell Runner** — Built-in terminal for running commands, checking processes, and viewing logs
 - **Telegram Notifications** — Instant alerts for motion detection, recording events, and low battery
 - **Recording Library** — Calendar view for browsing and managing recordings
 
+## OverDrive Cloud
+
+The easiest way to reach the car. Nothing to configure: no server, domain or token to enter.
+
+1. **The car enrolls by itself.** As soon as it is online (Wi-Fi or 4G) it registers with OverDrive Cloud, opens its tunnel and shows a QR code (Daemons → **OverDrive Cloud (FRP)**). The tunnel stays up even if the app is closed and reconnects on its own after network drops.
+2. **Add it to your phone.** Open [My cars](https://byd-gw.cloud.solucharger.com/gw/), sign in with Google and scan the QR code (or type the code under it). The car's interface then opens without a second password. Family members can add the same car with their own accounts.
+3. **Alerts on your phone.** Sentry, door, tyre and charging alerts go to the phones of everyone who added the car; turn them on or off per car.
+4. **Manage access.** On the car, "Accounts with access to this car" lists who added it; remove anyone, or tap "New code" so the old code stops working.
+
+**Updates:** when a new version is out, "Update available" shows in the car app at start, at the top right of the car's web interface and on the car's card in My cars — even when you are away from the car. One tap downloads the APK, checks its SHA-256 against the release, installs it and restarts the app. No ADB needed.
+
+What the cloud stores: your Google account id, email, name and picture URL; the cars you added; sessions; push subscriptions; and for each car its id, last connection time and IP, and app version. Keys are stored only as one-way hashes. Traffic to the car is relayed, but **camera images, location and vehicle data are never stored on the server**. See the [privacy notice](https://byd-gw.cloud.solucharger.com/gw/static/privacy.html).
+
 ## Remote Access
 
-Three options for viewing your car's cameras remotely:
+Besides OverDrive Cloud, you can view your car's cameras through your own connection:
 
 ### Local Network (LAN)
 Access at `http://<car-ip>:8080` when on the same WiFi. Zero setup, fastest streaming.
@@ -302,17 +342,17 @@ Full list of controllable entities and their accepted payloads:
 | Streaming Latency | <100ms |
 | Boot Time | <3 seconds |
 | AI Detection | Hardware accelerated, real-time (vehicles, people, objects) |
-| Tested On | BYD Seal (Global) |
-| Platform | DiLink v3 |
+| Tested On | BYD Tang 2025 (Global, firmware 51.1.2.2411280.1); upstream: BYD Seal (Global) |
+| Platform | DiLink 5 (Qualcomm 8155, 51.x firmware) — made for the Tang and Sealion 7; DiLink v3 |
 | Android | 10+ (API 29+) |
 | Architecture | arm64-v8a |
 
-> Should work on all BYD vehicles with DiLink v3 and panoramic camera system.
+> Made for the BYD Tang and Sealion 7 on 51.1.x firmware. Should also work on other BYD vehicles with DiLink v3 / DiLink 5 and the panoramic camera system.
 
 ## Building from Source
 
 ```bash
-git clone https://github.com/yash-srivastava/Overdrive-release.git
+git clone https://github.com/aliuysal60/Overdrive-Cloud.git
 ```
 
 Set up signing by exporting these environment variables before building:
@@ -329,6 +369,14 @@ Then build with Gradle:
 ```bash
 ./gradlew assembleRelease
 ```
+
+Set the version too, or the build falls back to an old default and the updater keeps offering an update. This fork numbers releases `57.0.N` with `versionCode = 5700000 + N`:
+
+```bash
+./gradlew assembleRelease -PoverdriveVersionName=57.0.4 -PoverdriveVersionCode=5700004
+```
+
+Unit tests: `./gradlew testDebugUnitTest`.
 
 ### Closed component: `libod.so`
 
@@ -437,14 +485,14 @@ If you want to use Zrok tunneling for remote access, you need your own Zrok invi
 
 ## Privacy
 
-- 100% local storage — all recordings saved on device
-- No account required
-- No cloud upload — remote viewing is direct via tunnels
+- 100% local storage — all recordings saved on the car
+- No account required — OverDrive Cloud (Google sign-in) is optional; LAN and your own tunnels work without it
+- No recordings uploaded — OverDrive Cloud relays traffic to the car but never stores camera images, location or vehicle data ([what it stores](#overdrive-cloud))
 - Open source — audit the code yourself
 
 ## Translations
 
-OverDrive's UI is translated through [Crowdin](https://crowdin.com/project/overdrive). The app currently ships in **16 languages** (English, German, Spanish, French, Hindi, Italian, Japanese, Korean, Dutch, Norwegian Bokmål, Brazilian Portuguese, Russian, Thai, Turkish, Vietnamese, Simplified Chinese, Traditional Chinese), with another ~14 languages open for community translation (Polish, Czech, Romanian, Catalan, Swedish, Finnish, Danish, Greek, Hungarian, Hebrew, Arabic, Serbian, Ukrainian, Afrikaans).
+Translations are shared with the upstream OverDrive project. OverDrive's UI is translated through [Crowdin](https://crowdin.com/project/overdrive). The app currently ships in **16 languages** (English, German, Spanish, French, Hindi, Italian, Japanese, Korean, Dutch, Norwegian Bokmål, Brazilian Portuguese, Russian, Thai, Turkish, Vietnamese, Simplified Chinese, Traditional Chinese), with another ~14 languages open for community translation (Polish, Czech, Romanian, Catalan, Swedish, Finnish, Danish, Greek, Hungarian, Hebrew, Arabic, Serbian, Ukrainian, Afrikaans).
 
 ### How to help
 
@@ -462,11 +510,13 @@ If you've contributed substantial translations for a language, open an issue or 
 
 ## Community
 
-- [Discord Server](https://discord.gg/PZutk9fg4h)
-- [Report Issues](https://github.com/yash-srivastava/Overdrive-release/issues)
-- [Translate on Crowdin](https://crowdin.com/project/overdrive)
+- [Report issues with this fork](https://github.com/aliuysal60/Overdrive-Cloud/issues) (Tang / Sealion 7, OverDrive Cloud, updates)
+- [OverDrive website and release history](https://overdrive.cloud.solucharger.com)
+- Upstream OverDrive: [Discord Server](https://discord.gg/PZutk9fg4h) • [Issues](https://github.com/yash-srivastava/Overdrive-release/issues) • [Translate on Crowdin](https://crowdin.com/project/overdrive)
 
 ## Acknowledgments
+
+- **OverDrive** — This fork is built on [OverDrive](https://github.com/yash-srivastava/Overdrive-release) by Yash Srivastava and its contributors (MIT). All the core features — recording pipeline, sentry mode, AI detection, tunnels, automations and the web app — come from the upstream project.
 
 - **Native Bangcle Crypto Engine** — Full Java port of BYD's proprietary white-box AES encryption, based on the reverse engineering work by [Niek/BYD-re](https://github.com/Niek/BYD-re) and [jkaberg/pyBYD](https://github.com/jkaberg/pyBYD). Zero new dependencies — uses the existing OkHttp stack and Java crypto libraries.
 - **3D BYD Vehicle Models** — Vehicle Control page uses base models from [ddiaz-design's BYD collection on Sketchfab](https://sketchfab.com/ddiaz-design/collections/byd-base-models-5bf92ab5f2be4ff6be5c3ac49f7099f3).
@@ -474,7 +524,23 @@ If you've contributed substantial translations for a language, open an issue or 
 
 ## Changelog
 
-Condensed highlights below. Full release notes for every version live in [RELEASE_NOTES.md](RELEASE_NOTES.md).
+Release notes for this fork live in [RELEASE_NOTES.md](RELEASE_NOTES.md) (Turkish) and on the [Releases page](https://github.com/aliuysal60/Overdrive-Cloud/releases). Upstream releases up to v57.0 are on the [upstream Releases page](https://github.com/yash-srivastava/Overdrive-release/releases); condensed upstream highlights follow below.
+
+### v57.0.1 – v57.0.4 — October 2026: OverDrive Cloud fork for the Tang & Sealion 7
+
+Based on upstream v57.0.
+
+**✨ New Features**
+- **OverDrive Cloud** — The car enrolls by itself and is added to your phone with a QR code or code; open it from anywhere at one address. Google sign-in, family sharing, alerts on your phone (sentry, door, tyre, charging) and an always-on tunnel that reconnects by itself
+- **Access control on the car** — See which accounts can reach the car, remove any of them, create a new code
+- **Remote updates** — "Update available" in the car app, at the top right of the car's web interface and in My cars on your phone; one tap downloads, verifies (SHA-256), installs and restarts
+- **In-app downloads** — Recordings and evidence packs download inside the web app with progress and cancel; on iPhone, "Save" opens the share sheet instead of a full-screen preview
+
+**⚡ Optimizations & Fixes**
+- **DiLink 5 (Tang / Sealion 7)** — Gear, speed and ignition detection, 12 V battery reading, camera recording, recovery of interrupted recordings and the app watchdog
+- **Sentry mode never sleeps** — Parked keep-alive holds the head unit awake while parked, with a 12 V battery guard
+
+---
 
 ### v35.0 — July 2026: Blind-Spot Camera Fixes & Pick-Your-Overlay
 
@@ -1000,8 +1066,8 @@ Android app + web companion rebuilt around how you actually use the car. Materia
 
 ## License
 
-Open source under MIT License. Your data stays on your device.
+Open source under MIT License. Your recordings stay on the car.
 
-OverDrive's own code is MIT-licensed. Bundled third-party components (cloudflared,
+OverDrive's own code is MIT-licensed (© Yash Srivastava; this fork's changes under the same license). Bundled third-party components (cloudflared,
 zrok, sing-box, tailscale, YOLO11n, and others) remain under their own licenses —
 see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

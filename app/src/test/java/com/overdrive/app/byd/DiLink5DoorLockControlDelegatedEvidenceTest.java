@@ -138,7 +138,7 @@ public class DiLink5DoorLockControlDelegatedEvidenceTest {
         assertEquals(DiLink5DoorLockControl.Result.Outcome.WRITTEN_UNCONFIRMED, unlock.outcome);
         assertEquals("setAllDoorsLock accepted rc=0; confirmation delegated to daemon rail carsvc", unlock.reason);
         assertEquals(1, port.writes);
-        assertEquals(DiLink5DoorLockControl.UNLOCK, port.writtenState);
+        assertEquals(DiLink5DoorLockControl.CARSVC_ALL_DOORS_UNLOCK, port.writtenState);
         assertEquals(port.readsAtWrite, port.reads); // zero confirmation reads after the write
         assertEquals(0, clock.sleeps);
         assertEquals(NOW, clock.now);
@@ -147,7 +147,7 @@ public class DiLink5DoorLockControlDelegatedEvidenceTest {
         DiLink5DoorLockControl.Result lock = delegated(lockPort, clock, true, APP_UNLOCKED, 2_000L);
         assertEquals(DiLink5DoorLockControl.Result.Outcome.WRITTEN_UNCONFIRMED, lock.outcome);
         assertFalse(lock.confirmed);
-        assertEquals(DiLink5DoorLockControl.LOCK, lockPort.writtenState);
+        assertEquals(DiLink5DoorLockControl.CARSVC_ALL_DOORS_LOCK, lockPort.writtenState);
         assertEquals(lockPort.readsAtWrite, lockPort.reads);
     }
 

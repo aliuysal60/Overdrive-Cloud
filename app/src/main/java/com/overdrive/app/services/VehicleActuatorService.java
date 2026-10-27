@@ -415,6 +415,8 @@ public class VehicleActuatorService extends Service {
             }
             final String guard = safetyGuard;
             final com.overdrive.app.remoteaccess.DiLink5ProximityCommandGuard.Scope scopedProximity = proximity;
+            final com.overdrive.app.byd.BydDataCollector.DiLink5LockEvidence manualLock =
+                    proximity == null ? diLink5ManualLockEvidence(request) : null;
             final String[] refusal = new String[1];
             final String[] detail = new String[1];
             result.putBoolean("success", VehicleActuatorBridge.runDiLink5Request(
@@ -446,7 +448,10 @@ public class VehicleActuatorService extends Service {
                                 DaemonLogger.beginThreadCapture();
                         boolean done;
                         try {
-                            done = command.executeViaSdk(collector);
+                            done = manualLock != null
+                                    ? VehicleActuatorBridge.withManualLockEvidence(manualLock,
+                                            () -> command.executeViaSdk(collector))
+                                    : command.executeViaSdk(collector);
                         } finally {
                             detail[0] = DaemonLogger.endThreadCapture(outerCapture);
                         }
@@ -677,6 +682,21 @@ public class VehicleActuatorService extends Service {
     private static long diLink5BridgeDynamicsAt(Intent request) {
         return request.getLongExtra(
                 VehicleActuatorBridge.DILINK5_DYNAMICS_AT, 0L);
+    }
+
+    /** The daemon's manual-lock carsvc reading, or null when absent or out of domain. */
+    private static com.overdrive.app.byd.BydDataCollector.DiLink5LockEvidence
+            diLink5ManualLockEvidence(Intent request) {
+        int state = request.getIntExtra(VehicleActuatorBridge.DILINK5_MANUAL_LOCK_STATE, 0);
+        long observedAt = request.getLongExtra(
+                VehicleActuatorBridge.DILINK5_MANUAL_LOCK_OBSERVED_AT, 0L);
+        if ((state != com.overdrive.app.byd.BydDataCollector.DOOR_STATE_UNLOCK
+                && state != com.overdrive.app.byd.BydDataCollector.DOOR_STATE_LOCK)
+                || observedAt <= 0L) {
+            return null;
+        }
+        return new com.overdrive.app.byd.BydDataCollector.DiLink5LockEvidence(state, observedAt,
+                com.overdrive.app.byd.DiLink5LockRail.CARSVC, Integer.MIN_VALUE, 0L);
     }
 
     private static Bundle bridgeJsonFailure(String message) {

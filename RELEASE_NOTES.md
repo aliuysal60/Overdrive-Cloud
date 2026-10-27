@@ -2,6 +2,10 @@
 
 BYD Tang ve Sealion 7 (DiLink 5, 51.1.x) için hazırlanan OverDrive sürümlerinin notları.
 
+## 57.0.5 — 2026-10-27
+
+- Tang / Sealion 7: telefondan ya da ekrandan kilitleme artık çalışıyor. Aracın kabin servisi sürücü kapısı kilidini okuyamadığı için komut hiç gönderilmiyordu; artık kilit durumu car_service'ten okunuyor ve kapının gerçekten kilitlendiği oradan teyit ediliyor. Araç kilitliyken kilit açma komutunu araç kabul etmiyor; uygulama bunu "başarısız" olarak bildirir
+
 ## 57.0.4 — 2026-10-26
 
 - Kayıt indirme uygulamanın içinde: alttaki panelde yüzde ve MB olarak ilerleme, İptal; indirilen dosyaya tekrar basınca ikinci indirme başlamaz

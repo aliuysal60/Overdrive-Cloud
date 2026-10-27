@@ -47,6 +47,13 @@ public final class VehicleActuatorBridge {
     public static final String DILINK5_RESULT_CPD_CABIN_ABSENT = "cpdCabinAbsent";
     /** App → daemon: the {@code DiLink5DoorLockControl.Result.Outcome} name of a DI5 lock/unlock. */
     public static final String DILINK5_RESULT_LOCK_OUTCOME = "lockOutcome";
+    /** Daemon → app, manual lock/unlock: the daemon's fresh carsvc LF reading (app domain, read time). */
+    public static final String DILINK5_MANUAL_LOCK_STATE = "bridge_manual_lock_state";
+    public static final String DILINK5_MANUAL_LOCK_OBSERVED_AT = "bridge_manual_lock_observed_at";
+    /** Daemon: car_service readback budget for a manual lock/unlock written on that reading. */
+    private static final long DILINK5_MANUAL_LOCK_CONFIRM_MS = 8_000L;
+    private static final ThreadLocal<BydDataCollector.DiLink5LockEvidence> MANUAL_LOCK_EVIDENCE =
+            new ThreadLocal<>();
     /** A generic frame's terminal admission refusal, separate from its vendor return code. */
     public static final String DILINK5_RESULT_ACTUATION_ABORT = "actuationAbort";
     public static final String DILINK5_CANCELLATION_RECEIVER = "frameCancellation";
@@ -257,6 +264,23 @@ public final class VehicleActuatorBridge {
         return scope == null ? null : scope.proximity;
     }
 
+    /** App side: runs {@code command} with the daemon's manual-lock carsvc reading bound to this thread. */
+    public static <T> T withManualLockEvidence(
+            BydDataCollector.DiLink5LockEvidence evidence, Callable<T> command) throws Exception {
+        BydDataCollector.DiLink5LockEvidence previous = MANUAL_LOCK_EVIDENCE.get();
+        MANUAL_LOCK_EVIDENCE.set(evidence);
+        try { return command.call(); }
+        finally {
+            if (previous == null) MANUAL_LOCK_EVIDENCE.remove();
+            else MANUAL_LOCK_EVIDENCE.set(previous);
+        }
+    }
+
+    /** App side: the manual-lock carsvc reading of the bridged request on this thread, or null. */
+    public static BydDataCollector.DiLink5LockEvidence currentManualLockEvidence() {
+        return MANUAL_LOCK_EVIDENCE.get();
+    }
+
     /** Daemon side: get-and-clear of the app's lock outcome recorded by the last dispatch on this thread. */
     public static String takeLastDiLink5LockOutcome() {
         String outcome = LAST_DILINK5_LOCK_OUTCOME.get();
@@ -349,6 +373,36 @@ public final class VehicleActuatorBridge {
         }
     }
 
+    static boolean isDiLink5LockCommand(
+            com.overdrive.app.byd.routing.VehicleCommandRouter.VehicleCommand command) {
+        return command instanceof com.overdrive.app.byd.routing.VehicleCommandRouter.LockCommand
+                || command instanceof com.overdrive.app.byd.routing.VehicleCommandRouter.UnlockCommand;
+    }
+
+    /**
+     * Daemon: the app wrote a manual lock/unlock on the carsvc reading because its typed readback
+     * is INVALID (Tang / Sealion 7), so success needs car_service to show the target afterwards.
+     */
+    private static boolean confirmDiLink5ManualLock(
+            com.overdrive.app.byd.routing.VehicleCommandRouter.VehicleCommand command,
+            long writtenAtElapsedMs) {
+        boolean locking =
+                command instanceof com.overdrive.app.byd.routing.VehicleCommandRouter.LockCommand;
+        boolean landed = BydDataCollector.getInstance().awaitDiLink5ManualCarSvcLock(
+                locking ? BydDataCollector.DOOR_STATE_LOCK : BydDataCollector.DOOR_STATE_UNLOCK,
+                writtenAtElapsedMs, DILINK5_MANUAL_LOCK_CONFIRM_MS);
+        noteDiLink5LockOutcome(landed
+                ? DiLink5DoorLockControl.Result.Outcome.CONFIRMED.name()
+                : DiLink5DoorLockControl.Result.Outcome.FAILED.name());
+        if (landed) {
+            logger.info("DI5 manual " + command.name() + ": confirmed on carsvc");
+        } else {
+            logger.warn("DI5 manual " + command.name() + ": carsvc did not confirm within "
+                    + DILINK5_MANUAL_LOCK_CONFIRM_MS + " ms");
+        }
+        return landed;
+    }
+
     public static boolean dispatchDiLink5Command(
             android.content.Context context,
             com.overdrive.app.byd.routing.VehicleCommandRouter.VehicleCommand command) {
@@ -363,6 +417,13 @@ public final class VehicleActuatorBridge {
                 intent.putExtra(com.overdrive.app.remoteaccess.DiLink5ProximityCommandGuard.EXTRA,
                         proximity.toJson().toString());
             } catch (Exception malformed) { return false; }
+        }
+        BydDataCollector.DiLink5LockEvidence manualLock =
+                proximity == null && isDiLink5LockCommand(command)
+                        ? BydDataCollector.getInstance().readDiLink5ManualCarSvcLock() : null;
+        if (manualLock != null) {
+            intent.putExtra(DILINK5_MANUAL_LOCK_STATE, manualLock.state);
+            intent.putExtra(DILINK5_MANUAL_LOCK_OBSERVED_AT, manualLock.observedAtElapsedMs);
         }
         android.os.Bundle result = dispatchDiLink5Request(
                 context, intent,
@@ -393,6 +454,10 @@ public final class VehicleActuatorBridge {
         }
         // Always (re)set: a previous dispatch's outcome must not survive into this one.
         noteDiLink5LockOutcome(result == null ? null : result.getString(DILINK5_RESULT_LOCK_OUTCOME));
+        if (success && manualLock != null && DiLink5DoorLockControl.Result.Outcome.WRITTEN_UNCONFIRMED
+                .name().equals(result.getString(DILINK5_RESULT_LOCK_OUTCOME))) {
+            success = confirmDiLink5ManualLock(command, android.os.SystemClock.elapsedRealtime());
+        }
         if (success && result.getString(DILINK5_RESULT_DETAIL) != null) {
             logger.info("DI5 app-process '" + command.name() + "': "
                     + result.getString(DILINK5_RESULT_DETAIL));

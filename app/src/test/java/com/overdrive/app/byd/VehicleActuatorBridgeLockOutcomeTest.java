@@ -102,10 +102,16 @@ public class VehicleActuatorBridgeLockOutcomeTest {
         assertTrue(body.contains("case DELEGATED_CARSVC:"));
         assertTrue(body.contains("DiLink5DoorLockControl.applyWithDelegatedEvidence(doorLockDevice, locked,\n"
                 + "                        scope.gateState, scope.gateObservedElapsedMs, requestCurrent,"));
+        // A manual command with the daemon's carsvc reading takes the typed-first fallback; without it, today's call.
+        assertTrue(body.contains("scope == null ? VehicleActuatorBridge.currentManualLockEvidence() : null;"));
         assertTrue(body.contains("default:\n"
-                + "                result = DiLink5DoorLockControl.setLocked(\n"
-                + "                        doorLockDevice, locked, requestCurrent,\n"
-                + "                        VehicleActuatorBridge::confirmProximityBeforeDiLink5Write);"));
+                + "                result = manualCarSvc != null\n"
+                + "                        ? DiLink5DoorLockControl.setLockedWithCarSvcFallback(doorLockDevice, locked,\n"
+                + "                                manualCarSvc.state, manualCarSvc.observedAtElapsedMs, requestCurrent,\n"
+                + "                                VehicleActuatorBridge::confirmProximityBeforeDiLink5Write)\n"
+                + "                        : DiLink5DoorLockControl.setLocked(\n"
+                + "                                doorLockDevice, locked, requestCurrent,\n"
+                + "                                VehicleActuatorBridge::confirmProximityBeforeDiLink5Write);"));
         assertTrue(body.contains("&& !VehicleActuatorBridge.isDiLink5RequestExpired()"));
         assertTrue(body.contains("DrivingSafetyGuard.GUARD_DOOR_LOCKS) == null;"));
         // Outcome log line, thread-local hand-off, and FAILED is the only false.

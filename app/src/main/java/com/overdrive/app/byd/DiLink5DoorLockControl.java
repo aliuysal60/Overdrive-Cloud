@@ -402,6 +402,16 @@ final class DiLink5DoorLockControl {
     /** Case (C): the gate evidence that authorises a write must be at most this old at write time. */
     static final long DILINK5_GATE_EVIDENCE_WRITE_MAX_AGE_MS = 6_000L;
 
+    /**
+     * {@code setAllDoorsLock} value on firmware whose typed LF readback is INVALID (Tang / Sealion 7):
+     * the call passes straight through to {@code ALL_DOORS_LOCK} ({@code 0x21403707}), and that
+     * firmware's own SystemUI locks with {@code 2} ({@code DoorRequest.LOCK}), the car_service
+     * domain (LF {@code 0x21404627}: 1 unlocked, 2 locked) and the reverse of the SDK's
+     * {@code DOOR_LOCK_STATE_*}. Field-checked on the Tang: writing {@code 2} to unlock left it locked.
+     */
+    static final int CARSVC_ALL_DOORS_LOCK = 2;
+    static final int CARSVC_ALL_DOORS_UNLOCK = 1;
+
     /** App LOCK {@code 2} → native LOCK {@code 1}; app UNLOCK {@code 1} → native UNLOCK {@code 2}; else 0. */
     static int nativeOf(int appState) {
         return appState == 2 ? LOCK : appState == 1 ? UNLOCK : 0;
@@ -466,8 +476,8 @@ final class DiLink5DoorLockControl {
             if (beforeWrite == null || !beforeWrite.getAsBoolean() || !current(requestCurrent)) {
                 return failed("proximity command revoked before write");
             }
-            // (6) the write
-            int rc = typed.writeAllDoors(target);
+            // (6) the write, in the car_service domain this firmware's ALL_DOORS_LOCK expects
+            int rc = typed.writeAllDoors(locked ? CARSVC_ALL_DOORS_LOCK : CARSVC_ALL_DOORS_UNLOCK);
             if (rc != 0) return failed("setAllDoorsLock refused rc=" + rc);
             // (7) no confirmation readback here — never CONFIRMED from the app on this path
             return written("setAllDoorsLock accepted rc=0; confirmation delegated to daemon rail carsvc");
@@ -478,6 +488,45 @@ final class DiLink5DoorLockControl {
             return failed("typed door-lock request failed ("
                     + failure.getClass().getSimpleName() + ")");
         }
+    }
+
+    // ---- manual lock/unlock with the daemon's carsvc reading as fallback ----
+
+    /**
+     * Manual lock/unlock entry for {@code setDiLink5AllDoorsLocked} when the daemon sent a fresh
+     * {@code carsvc} reading with the request. Tang / Sealion 7 firmware lacks the cabin service's
+     * LF property ({@code 0x21403702}), so the typed readback is INVALID there and case (C) takes
+     * over with that reading; the daemon then confirms on car_service. A car whose typed readback
+     * works keeps today's {@link #apply} path unchanged.
+     */
+    static Result setLockedWithCarSvcFallback(Object doorLockDevice, boolean locked, int carsvcStateApp,
+                                              long carsvcObservedElapsedMs, BooleanSupplier requestCurrent,
+                                              BooleanSupplier beforeWrite) {
+        try {
+            return applyWithCarSvcFallback(new ReflectivePort(doorLockDevice), locked, carsvcStateApp,
+                    carsvcObservedElapsedMs, requestCurrent, beforeWrite, systemClock());
+        } catch (Exception unavailable) {
+            return failed("typed door-lock rail unavailable ("
+                    + unavailable.getClass().getSimpleName() + ")");
+        }
+    }
+
+    static Result applyWithCarSvcFallback(NativePort typed, boolean locked, int carsvcStateApp,
+                                          long carsvcObservedElapsedMs, BooleanSupplier requestCurrent,
+                                          BooleanSupplier beforeWrite, Clock clock) {
+        try {
+            if (!current(requestCurrent)) return failed("request expired or mode changed");
+            if (!typed.ready()) return failed("cabin adapter unavailable");
+            int typedBefore = typed.readDriverLock();
+            if (typedBefore == LOCK || typedBefore == UNLOCK) {
+                return apply(typed, locked, requestCurrent, beforeWrite, clock);
+            }
+        } catch (Exception failure) {
+            return failed("typed door-lock request failed ("
+                    + failure.getClass().getSimpleName() + ")");
+        }
+        return applyWithDelegatedEvidence(typed, locked, carsvcStateApp, carsvcObservedElapsedMs,
+                requestCurrent, beforeWrite, clock);
     }
 
     /**

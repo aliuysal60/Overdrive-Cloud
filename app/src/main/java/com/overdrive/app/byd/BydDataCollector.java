@@ -1921,6 +1921,57 @@ public class BydDataCollector {
     }
 
     /**
+     * DI5 daemon, manual lock/unlock: one carsvc LF lock reading from a car_service dump at most
+     * {@link CarSvcTelemetry#DUMP_TTL_MS} old (spawns one unless cached), under the carsvc rail's
+     * rules. Independent of the proximity gate (no remote-access or ACC condition): a manual
+     * command needs a reading whenever it is sent. Null outside the DI5 daemon or when invalid.
+     */
+    public DiLink5LockEvidence readDiLink5ManualCarSvcLock() {
+        if (!isDiLink5Vehicle() || isMainAppProcess()) return null;
+        try {
+            CarSvcTelemetry.INSTANCE.dumpsysText();
+            CarSvcTelemetry.CachedDump dump = CarSvcTelemetry.cachedDump();
+            if (dump == null) return null;
+            CarSvcTelemetry.LockEvent lf =
+                    CarSvcTelemetry.parseLockEvent(dump.getText(), CarSvcTelemetry.LF_LOCK_PROP_ID);
+            DiLink5CarSvcLockObservation o = evaluateDiLink5CarSvcLock(
+                    lf, dump.getObservedAtElapsedMs(), SystemClock.elapsedRealtime(),
+                    SystemClock.elapsedRealtimeNanos(), diLink5CarSvcLockMaxEventAgeNs);
+            if (o.state != DOOR_STATE_UNLOCK && o.state != DOOR_STATE_LOCK) return null;
+            return new DiLink5LockEvidence(o.state, dump.getObservedAtElapsedMs(),
+                    DiLink5LockRail.CARSVC, o.raw, o.halTimestampNs);
+        } catch (Throwable t) {
+            logger.debug("DI5 manual carsvc lock read failed: " + t.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * DI5 daemon, manual lock/unlock: waits up to {@code timeoutMs} for a carsvc reading of
+     * {@code targetState} (app domain) from a dump taken after {@code writtenAtElapsedMs}.
+     */
+    public boolean awaitDiLink5ManualCarSvcLock(int targetState, long writtenAtElapsedMs,
+                                                long timeoutMs) {
+        long deadline = SystemClock.elapsedRealtime() + timeoutMs;
+        while (SystemClock.elapsedRealtime() < deadline) {
+            DiLink5LockEvidence reading = readDiLink5ManualCarSvcLock();
+            if (reading != null && reading.observedAtElapsedMs > writtenAtElapsedMs
+                    && reading.state == targetState) {
+                return true;
+            }
+            try {
+                Thread.sleep(DILINK5_MANUAL_CARSVC_POLL_MS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
+    }
+
+    private static final long DILINK5_MANUAL_CARSVC_POLL_MS = 250L;
+
+    /**
      * Applies the {@code di5LockRails} setting to the gate ledger. Callers read settings (file I/O)
      * BEFORE calling this and never hold {@code diLink5IngressLock}; lock order is
      * {@code STATE → diLink5IngressLock → ledger}. A rail being disabled loses its held evidence.
@@ -17890,6 +17941,9 @@ public class BydDataCollector {
         com.overdrive.app.remoteaccess.DiLink5ProximityCommandGuard.Scope scope =
                 VehicleActuatorBridge.currentDiLink5ProximityScope();
         DiLink5LockRail gateRail = scope == null ? null : scope.gateRailOrNull();
+        // Manual command: the daemon's fresh carsvc reading, used only if the typed readback is INVALID.
+        DiLink5LockEvidence manualCarSvc =
+                scope == null ? VehicleActuatorBridge.currentManualLockEvidence() : null;
         DiLink5DoorLockControl.Result result;
         switch (DiLink5DoorLockControl.selectDiLink5LockMode(gateRail, otaDevice != null)) {
             case OTA:
@@ -17903,9 +17957,13 @@ public class BydDataCollector {
                         VehicleActuatorBridge::confirmProximityBeforeDiLink5Write);
                 break;
             default:
-                result = DiLink5DoorLockControl.setLocked(
-                        doorLockDevice, locked, requestCurrent,
-                        VehicleActuatorBridge::confirmProximityBeforeDiLink5Write);
+                result = manualCarSvc != null
+                        ? DiLink5DoorLockControl.setLockedWithCarSvcFallback(doorLockDevice, locked,
+                                manualCarSvc.state, manualCarSvc.observedAtElapsedMs, requestCurrent,
+                                VehicleActuatorBridge::confirmProximityBeforeDiLink5Write)
+                        : DiLink5DoorLockControl.setLocked(
+                                doorLockDevice, locked, requestCurrent,
+                                VehicleActuatorBridge::confirmProximityBeforeDiLink5Write);
                 break;
         }
         logger.info("DI5 " + (locked ? "lock" : "unlock") + ": " + result.reason

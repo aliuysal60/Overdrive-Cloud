@@ -48,7 +48,7 @@
         var names = {
             camera: 'Camera', accsentry: 'ACC Sentry', sentry: 'Sentry',
             telegram: 'Telegram', cloudflared: 'Cloudflared', zrok: 'Zrok',
-            tailscale: 'Tailscale', wireguard: 'WireGuard', singbox: 'Sing-box'
+            tailscale: 'Tailscale', wireguard: 'WireGuard', singbox: 'Sing-box', frp: 'FRP / OverDrive Cloud'
         };
         return names[key] || key;
     }

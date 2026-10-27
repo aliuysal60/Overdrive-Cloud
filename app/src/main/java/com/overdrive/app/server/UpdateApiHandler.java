@@ -106,7 +106,7 @@ public class UpdateApiHandler {
         // Alpha is a browse-and-pick archive — there is no single "the update"
         // to push. Tell the client to open the catalog instead of an install
         // prompt. (forceReload first so a freshly-toggled channel is seen.)
-        if (AppUpdater.CHANNEL_ALPHA.equals(channel)) {
+        if (AppUpdater.isCatalogChannel(channel)) {
             com.overdrive.app.config.UnifiedConfigManager.forceReload();
             JSONObject r = new JSONObject();
             r.put("available", false);
@@ -136,6 +136,7 @@ public class UpdateApiHandler {
                 try {
                     r.put("available", true);
                     r.put("channel", channel);
+                    putSource(r);
                     r.put("currentVersion", currentVersion);
                     r.put("remoteVersion", newVersion);
                     r.put("releaseNotes", releaseNotes != null ? releaseNotes : "");
@@ -148,6 +149,7 @@ public class UpdateApiHandler {
                 try {
                     r.put("available", false);
                     r.put("channel", channel);
+                    putSource(r);
                     r.put("currentVersion", currentVersion);
                     r.put("remoteVersion", currentVersion);
                     r.put("releaseNotes", "");
@@ -267,7 +269,7 @@ public class UpdateApiHandler {
 
             AppUpdater updater = new AppUpdater(ctx);
 
-            if (AppUpdater.CHANNEL_ALPHA.equals(channel)) {
+            if (AppUpdater.isCatalogChannel(channel)) {
                 updater.listVersions(new AppUpdater.VersionListCallback() {
                     @Override public void onResult(java.util.List<AppUpdater.VersionEntry> versions, String currentVersion) {
                         JSONObject r = new JSONObject();
@@ -335,6 +337,14 @@ public class UpdateApiHandler {
                         + (t.getMessage() != null ? t.getMessage() : t.getClass().getSimpleName()));
             } catch (Exception ignored) {}
         }
+    }
+
+    /**
+     * Marks a check answer that came from the OverDrive Cloud release server, so
+     * the webapp shows the single-update flow without the channel switcher.
+     */
+    private static void putSource(JSONObject r) throws Exception {
+        if (com.overdrive.app.updater.CloudReleases.ENABLED) r.put("source", "cloud");
     }
 
     /** Build a single-element braveheart catalog payload. */
@@ -520,7 +530,7 @@ public class UpdateApiHandler {
                 HttpResponse.sendJsonError(out, Messages.get("errors.update_channel_tag_mismatch"));
                 return;
             }
-            if (!AppUpdater.CHANNEL_ALPHA.equals(activeChannel)) {
+            if (!AppUpdater.isCatalogChannel(activeChannel)) {
                 AppUpdater.endInstall();
                 try { updater.close(); } catch (Exception ignored) {}
                 HttpResponse.sendJsonError(out, Messages.get("errors.update_channel_tag_mismatch"));

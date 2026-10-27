@@ -9,6 +9,7 @@ import com.overdrive.app.launcher.ZrokLauncher
 import com.overdrive.app.launcher.TailscaleLauncher
 import com.overdrive.app.launcher.TunnelLauncher
 import com.overdrive.app.launcher.WireGuardLauncher
+import com.overdrive.app.launcher.FrpLauncher
 import com.overdrive.app.logging.LogManager
 import com.overdrive.app.telegram.config.UnifiedTelegramConfig
 import com.overdrive.app.ui.model.DaemonType
@@ -92,6 +93,7 @@ class DaemonStartupManager(
             DaemonType.ZROK_TUNNEL,
             DaemonType.TAILSCALE_TUNNEL,
             DaemonType.WIREGUARD_TUNNEL,
+            DaemonType.FRP_TUNNEL,
             DaemonType.TELEGRAM_DAEMON,
         )
 
@@ -876,6 +878,24 @@ class DaemonStartupManager(
                 }
             }
         }
+
+        // FRP (OverDrive Cloud or self-hosted) runs independently too, once its settings are stored
+        autoEnableCloudTunnel {
+            if (PreferencesManager.isDaemonEnabled(DaemonType.FRP_TUNNEL)) {
+                vm.frpController.isRunning { isRunning ->
+                    if (isRunning) {
+                        log.info(TAG, "FRP tunnel already running, skipping start")
+                    } else {
+                        ifFrpConfigured {
+                            ifNotUserStopped(DaemonType.FRP_TUNNEL) {
+                                log.info(TAG, "Starting FRP tunnel (user enabled)...")
+                                vm.startDaemon(DaemonType.FRP_TUNNEL, userInitiated = false)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun startOptionalDaemonsViaAdb() {
@@ -926,6 +946,17 @@ class DaemonStartupManager(
                         ifNotUserStopped(DaemonType.WIREGUARD_TUNNEL) {
                             log.info(TAG, "Boot: Starting WireGuard...")
                             startWireGuardOnBoot()
+                        }
+                    }
+                }
+
+                autoEnableCloudTunnel {
+                    if (PreferencesManager.isDaemonEnabled(DaemonType.FRP_TUNNEL)) {
+                        ifFrpConfigured {
+                            ifNotUserStopped(DaemonType.FRP_TUNNEL) {
+                                log.info(TAG, "Boot: Starting FRP tunnel...")
+                                startFrpOnBoot()
+                            }
                         }
                     }
                 }
@@ -1003,6 +1034,60 @@ class DaemonStartupManager(
         WireGuardLauncher(context, adbLauncher.adbShellExecutor, log).hasConfig { configured ->
             if (configured) action() else log.debug(TAG, "WireGuard has no config, not starting")
         }
+    }
+
+    /**
+     * OverDrive Cloud: the car enrolls itself (camera daemon), so its tunnel must not wait for the
+     * user to find the switch. The first time an enrollment is seen, the FRP tunnel is marked
+     * enabled — once: a later "off" from the user sticks. Runs `then` afterwards either way.
+     */
+    private fun autoEnableCloudTunnel(then: () -> Unit) {
+        if (PreferencesManager.isFrpCloudAutoEnabled() || ownFrpServerSeen) {
+            then()
+            return
+        }
+        FrpLauncher(context, adbLauncher.adbShellExecutor, log).tunnelMode { mode ->
+            when (mode) {
+                "cloud" -> {
+                    log.info(TAG, "OverDrive Cloud enrollment found - enabling the FRP tunnel")
+                    PreferencesManager.setDaemonEnabled(DaemonType.FRP_TUNNEL, true)
+                    PreferencesManager.setFrpCloudAutoEnabled()
+                }
+                // own frps: the daemon never enrolls, so stop asking for this process lifetime
+                "manual" -> ownFrpServerSeen = true
+            }
+            then()
+        }
+    }
+
+    @Volatile
+    private var ownFrpServerSeen = false
+
+    private fun ifFrpConfigured(action: () -> Unit) {
+        FrpLauncher(context, adbLauncher.adbShellExecutor, log).hasConfig { configured ->
+            if (configured) action() else log.debug(TAG, "FRP tunnel has no settings, not starting")
+        }
+    }
+
+    /**
+     * Start the FRP tunnel on boot / from the health check using FrpLauncher directly.
+     */
+    private fun startFrpOnBoot() {
+        FrpLauncher(context, adbLauncher.adbShellExecutor, log).launch(object : FrpLauncher.FrpCallback {
+            override fun onLog(message: String) {
+                log.debug(TAG, "[FRP Boot] $message")
+            }
+
+            override fun onStarted(url: String?) {
+                log.info(TAG, "Boot: FRP tunnel started: $url")
+            }
+
+            override fun onStopped() {}
+
+            override fun onError(error: String) {
+                log.error(TAG, "Boot: FRP tunnel error: $error")
+            }
+        })
     }
 
     /**
@@ -1373,6 +1458,10 @@ class DaemonStartupManager(
         // Semantics are unchanged: same candidates, same gates, same order, same
         // relaunch decisions (processAliveIn reproduces the old grep matching,
         // including sentry's acc_ exclusion).
+        // The daemon enrolls in the background after start-up; pick the tunnel up on the first
+        // tick that sees the enrollment (it is relaunched on the next tick as "enabled + dead").
+        if (!PreferencesManager.isFrpCloudAutoEnabled()) autoEnableCloudTunnel {}
+
         val candidates = ArrayList<DaemonType>(CORE_DAEMONS.size + OPTIONAL_DAEMONS.size)
 
         // Core daemons: always restart unless user explicitly stopped
@@ -1415,6 +1504,11 @@ class DaemonStartupManager(
                 if (!adbLauncher.processAliveIn(snapshot, type.processName)) {
                     if (type == DaemonType.WIREGUARD_TUNNEL) {
                         ifWireGuardConfigured {
+                            log.warn(TAG, "Health check: ${type.displayName} is DEAD — relaunching...")
+                            relaunchDaemon(type)
+                        }
+                    } else if (type == DaemonType.FRP_TUNNEL) {
+                        ifFrpConfigured {
                             log.warn(TAG, "Health check: ${type.displayName} is DEAD — relaunching...")
                             relaunchDaemon(type)
                         }
@@ -1566,6 +1660,10 @@ class DaemonStartupManager(
                 DaemonType.WIREGUARD_TUNNEL -> {
                     log.info(TAG, "HealthCheck: relaunching WireGuard via boot-path fallback")
                     startWireGuardOnBoot()
+                }
+                DaemonType.FRP_TUNNEL -> {
+                    log.info(TAG, "HealthCheck: relaunching FRP tunnel via boot-path fallback")
+                    startFrpOnBoot()
                 }
                 else -> {
                     log.warn(TAG, "Health check: no ADB fallback for ${type.displayName}")

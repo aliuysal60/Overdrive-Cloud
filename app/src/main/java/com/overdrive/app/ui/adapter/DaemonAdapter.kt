@@ -151,7 +151,8 @@ class DaemonAdapter(
             val isConfigurable = (state.type == DaemonType.CLOUDFLARED_TUNNEL || 
                                   state.type == DaemonType.ZROK_TUNNEL || 
                                   state.type == DaemonType.TAILSCALE_TUNNEL ||
-                                  state.type == DaemonType.WIREGUARD_TUNNEL) && onConfigureClick != null
+                                  state.type == DaemonType.WIREGUARD_TUNNEL ||
+                                  state.type == DaemonType.FRP_TUNNEL) && onConfigureClick != null
             ivConfigure.visibility = if (isConfigurable) View.VISIBLE else View.GONE
             if (isConfigurable) {
                 ivConfigure.setOnClickListener {
@@ -237,6 +238,7 @@ class DaemonAdapter(
             DaemonType.ZROK_TUNNEL -> R.drawable.ic_link
             DaemonType.TAILSCALE_TUNNEL -> R.drawable.ic_mqtt
             DaemonType.WIREGUARD_TUNNEL -> R.drawable.ic_vpn_lock
+            DaemonType.FRP_TUNNEL -> R.drawable.ic_link
             DaemonType.TELEGRAM_DAEMON -> R.drawable.ic_telegram
         }
         
@@ -267,6 +269,7 @@ class DaemonAdapter(
                 DaemonType.ZROK_TUNNEL -> com.overdrive.app.util.ScratchRoot.path("zrok.log")
                 DaemonType.TAILSCALE_TUNNEL -> com.overdrive.app.util.ScratchRoot.path(".tailscale/tailscale.log")
                 DaemonType.WIREGUARD_TUNNEL -> com.overdrive.app.wireguard.WireGuardPaths.LOG
+                DaemonType.FRP_TUNNEL -> com.overdrive.app.frp.FrpPaths.LOG
                 DaemonType.SINGBOX_PROXY -> com.overdrive.app.util.ScratchRoot.path("singbox.log")
                 DaemonType.TELEGRAM_DAEMON -> com.overdrive.app.util.ScratchRoot.path("telegrambotdaemon.log")
             }
@@ -286,6 +289,7 @@ class DaemonAdapter(
                 DaemonType.ZROK_TUNNEL -> "zrok"
                 DaemonType.TAILSCALE_TUNNEL -> "tailscale"
                 DaemonType.WIREGUARD_TUNNEL -> "wireguard"
+                DaemonType.FRP_TUNNEL -> "frp"
                 DaemonType.SINGBOX_PROXY -> "singbox"
             }
         }

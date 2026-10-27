@@ -92,6 +92,8 @@ tasks.configureEach {
 // OpenCV-mobile version for surveillance module (minimal build, ~3MB vs ~20MB)
 // https://github.com/nihui/opencv-mobile
 val opencvMobileVersion = "4.10.0"
+// opencv-mobile tags its releases vNN, not vVERSION; v31 is the newest one that ships 4.10.0.
+val opencvMobileReleaseTag = "v31"
 tasks.register("downloadOpenCV") {
     val opencvDir = file("src/main/cpp/opencv")
     
@@ -106,8 +108,8 @@ tasks.register("downloadOpenCV") {
         if (!staticLib.exists()) {
             println("Downloading opencv-mobile ${opencvMobileVersion} for Android...")
             
-            // Correct URL format: /releases/download/vVERSION/
-            val zipUrl = "https://github.com/nihui/opencv-mobile/releases/download/v${opencvMobileVersion}/opencv-mobile-${opencvMobileVersion}-android.zip"
+            // URL format: /releases/download/<release tag>/opencv-mobile-VERSION-android.zip
+            val zipUrl = "https://github.com/nihui/opencv-mobile/releases/download/${opencvMobileReleaseTag}/opencv-mobile-${opencvMobileVersion}-android.zip"
             val zipFile = file("${opencvDir}/opencv-mobile-android.zip")
             
             try {
@@ -133,8 +135,10 @@ tasks.register("downloadOpenCV") {
                     val extractedDir = file("${opencvDir}/opencv-mobile-${opencvMobileVersion}-android")
                     
                     if (extractedDir.exists()) {
-                        // Copy arm64-v8a static libs
-                        val extractedLibDir = file("${extractedDir}/arm64-v8a/lib")
+                        // Copy arm64-v8a static libs. Current archives use the OpenCV
+                        // Android SDK layout (sdk/native/...); keep the old flat layout as fallback.
+                        val extractedLibDir = file("${extractedDir}/sdk/native/staticlibs/arm64-v8a")
+                            .takeIf { it.exists() } ?: file("${extractedDir}/arm64-v8a/lib")
                         if (extractedLibDir.exists()) {
                             extractedLibDir.listFiles()?.forEach { f ->
                                 println("  Copying lib: ${f.name}")
@@ -146,7 +150,8 @@ tasks.register("downloadOpenCV") {
                         }
                         
                         // Copy headers
-                        val extractedInclude = file("${extractedDir}/arm64-v8a/include")
+                        val extractedInclude = file("${extractedDir}/sdk/native/jni/include")
+                            .takeIf { it.exists() } ?: file("${extractedDir}/arm64-v8a/include")
                         if (extractedInclude.exists()) {
                             if (includeDir.exists()) includeDir.deleteRecursively()
                             extractedInclude.copyRecursively(includeDir, overwrite = true)
@@ -520,6 +525,8 @@ android {
             keepDebugSymbols += "**/libtailscale.so"
             // libwireguard.so (wgproxy) is UPX-packed the same way
             keepDebugSymbols += "**/libwireguard.so"
+            // libfrpc.so is the unmodified upstream frpc release (fatedier/frp); ship it as verified
+            keepDebugSymbols += "**/libfrpc.so"
 
             // Keep only arm64-v8a (You already have this, but good to keep)
             excludes += listOf(

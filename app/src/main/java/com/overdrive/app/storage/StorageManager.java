@@ -1066,6 +1066,16 @@ public class StorageManager {
                             hopLeftovers.add(f);
                             continue;
                         }
+                        String partialName = f.getName();
+                        if (partialName.endsWith(com.overdrive.app.surveillance.Mp4Salvage.SUFFIX)) {
+                            // a journal is handled together with its .mp4.tmp; only an
+                            // orphan one (tmp already finalized or gone) is reaped here
+                            File journalTmp = new File(f.getParentFile(), partialName.substring(0,
+                                    partialName.length() - com.overdrive.app.surveillance.Mp4Salvage.SUFFIX.length()));
+                            if (journalTmp.exists()) continue;
+                        } else if (partialName.endsWith(".mp4.tmp")) {
+                            salvageOrphanSegment(f);
+                        }
                         long size = f.length();
                         boolean ok = f.delete();
                         if (!ok) ok = deleteFileViaShell(f);
@@ -1098,6 +1108,29 @@ public class StorageManager {
         }
     }
     
+    /**
+     * Rebuilds a segment cut off before MediaMuxer.stop() from its {@code .mp4.tmp} and Mp4Salvage
+     * journal, as the {@code .mp4} the recorder would have produced (or {@code _recovered.mp4} when
+     * that name is taken). The caller deletes the tmp afterwards either way; the journal goes here.
+     */
+    private void salvageOrphanSegment(File tmp) {
+        File journal = new File(tmp.getAbsolutePath() + com.overdrive.app.surveillance.Mp4Salvage.SUFFIX);
+        if (!journal.isFile()) return;
+        String tmpPath = tmp.getAbsolutePath();
+        String finalPath = tmpPath.substring(0, tmpPath.length() - ".tmp".length());
+        File out = new File(finalPath);
+        if (out.exists()) {
+            out = new File(finalPath.substring(0, finalPath.length() - ".mp4".length()) + "_recovered.mp4");
+        }
+        int samples = com.overdrive.app.surveillance.Mp4Salvage.recover(tmp, journal, out);
+        if (samples > 0) {
+            logInfo("Recovered interrupted recording (" + samples + " frames): " + out.getAbsolutePath());
+        } else {
+            logWarn("Interrupted recording not recoverable: " + tmp.getName());
+        }
+        if (!journal.delete()) deleteFileViaShell(journal);
+    }
+
     public static synchronized StorageManager getInstance() {
         if (instance == null) {
             instance = new StorageManager();
@@ -9523,13 +9556,18 @@ public class StorageManager {
             // proximity dirs too (getReapableDirs), and proximity events write a
             // hero thumb. sweepOrphanTempFiles claims each dir once, recordings
             // first, so a partial this list omits would be swept by nothing.
-            case "recordings":   return new String[]{".mp4.tmp", ".broken", ".json.tmp", ".srt.tmp", ".jpg.tmp"};
-            case "surveillance": return new String[]{".mp4.tmp", ".broken", ".jpg.tmp", ".json.tmp", ".srt.tmp"};
+            // .mp4.tmp.salvage: Mp4Salvage journal of a live segment; reaped only once its
+            // .mp4.tmp is gone (sweepOrphanTempFiles salvages the pair first).
+            case "recordings":   return new String[]{".mp4.tmp", ".broken", ".json.tmp", ".srt.tmp", ".jpg.tmp",
+                    ".mp4.tmp.salvage"};
+            case "surveillance": return new String[]{".mp4.tmp", ".broken", ".jpg.tmp", ".json.tmp", ".srt.tmp",
+                    ".mp4.tmp.salvage"};
             // .json.tmp added so the geo-backfill sidecar rewrite (SidecarGeoUpdater,
             // which sweeps proximity dirs too) leaves no unreaped orphan on a
             // SIGKILL in its write→rename window; .jpg.tmp mirrors the surveillance
             // hero-thumb partial since proximity events write the same sidecar/thumb set.
-            case "proximity":    return new String[]{".mp4.tmp", ".broken", ".json.tmp", ".jpg.tmp", ".srt.tmp"};
+            case "proximity":    return new String[]{".mp4.tmp", ".broken", ".json.tmp", ".jpg.tmp", ".srt.tmp",
+                    ".mp4.tmp.salvage"};
             case "trips":        return new String[]{".jsonl.gz.tmp"};
             default:             return new String[]{};
         }

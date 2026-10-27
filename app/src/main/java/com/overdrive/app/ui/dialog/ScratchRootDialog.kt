@@ -183,6 +183,7 @@ object ScratchRootDialog {
             "start_singbox", "sing-box",
             "start_zrok", "zrok",
             "cloudflared", "tailscaled", "wgproxy",
+            ".frp/run.sh", "odfrpc",
             "fast_cam_capture", "qcarcam_test"
         )) {
             // DiLink 5: fast_cam_capture stops its cameras on SIGTERM before the kill -9 below.

@@ -45,15 +45,25 @@ public final class ParkedLink {
         return compatibility;
     }
 
+    /**
+     * Dispatches through the pure-Java CAN NM client ({@link CanNmLink}).
+     *
+     * <p>The original path called {@code nativeExecute} in libodpark.so, which
+     * SHA-256-verifies the APK signer against the upstream release key before
+     * speaking the OTA sendCanNM protocol and answers -109 for every other
+     * signature — a self-built APK could never pass it. The wire protocol was
+     * recovered from the library statically and reimplemented in Java, so the
+     * transport no longer depends on the native gate at all. The native loader
+     * below is kept only so diagnostics that probe ABI compatibility keep
+     * compiling; it is never required for execute().
+     */
     static int execute(Context context, int operation) {
         if (context == null || operation < ParkedLinkContract.OP_ASSERT
                 || operation > ParkedLinkContract.OP_DETACH) {
             return ParkedLinkContract.RESULT_BAD_REQUEST;
         }
         try {
-            int available = tryLoadLibrary(context.getApplicationInfo().nativeLibraryDir);
-            if (available != ParkedLinkContract.RESULT_CONFIRMED) return available;
-            return nativeExecute(context, operation);
+            return CanNmLink.execute(context, operation);
         } catch (Throwable failure) {
             // No exception text: framework errors can contain private endpoints.
             return ParkedLinkContract.RESULT_INTERNAL_FAILED;

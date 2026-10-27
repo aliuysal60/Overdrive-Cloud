@@ -168,6 +168,8 @@ class AdbShellExecutor(private val context: Context) {
 
         // Auth state tracking
         private val isAuthPending = AtomicBoolean(false)
+        /** BYD 51.x: TLS kapama döngüsü süreç başına yalnız bir kez. */
+        private val bydTlsCycleAttempt = AtomicBoolean(false)
         private val wasAuthGranted = AtomicBoolean(false)
         private val pollingStarted = AtomicBoolean(false)
 
@@ -706,9 +708,46 @@ class AdbShellExecutor(private val context: Context) {
      * class implicated in the vendor adbd abort incident.
      *
      * The mutex is held only for the holder check or the connect attempt —
-     * never across command execution.
+     * never across command execution. The BYD enabler steps (which can block
+     * for tens of seconds while adbd restarts) run OFF the mutex.
      */
     private fun acquireConnection(): SharedConn {
+        sharedConn?.let { return it }
+
+        // BYD 51.x (SA8155): port kapalıysa TS Settings köprüsü + OTA test
+        // komutuyla kablosuz ADB'yi kendimiz açarız (dadb ADB kapalıyken hiç
+        // bir şey yapamaz). Teşhis: .../files/adb_fix.log
+        if (!isAdbPortOpen()) {
+            logger.warn(TAG, "ADB port $ADB_PORT not open - running BydAdbEnabler")
+            BydAdbEnabler.ensureAdbEnabled(context)
+        }
+
+        connectOnce()?.let { return it }
+
+        // BYD 51.x: dadb TLS desteklemez; adbd TLS modundaysa el sıkışma
+        // sessizce ölür (diyalog bile çıkmaz). Bir kezliğine TLS kapama
+        // döngüsü çalıştır ve tekrar dene. Only before the FIRST connection of
+        // this process: the cycle restarts adbd, and adbd's death SIGKILLs every
+        // daemon it spawned, so it must never run against a live session.
+        // (connectionGeneration, unlike wasAuthGranted, is never reset.)
+        if (connectionGeneration.get() == 0L && bydTlsCycleAttempt.compareAndSet(false, true)) {
+            logger.warn(TAG, "ADB probe failed before first connection - BYD TLS-off cycle + retry")
+            BydAdbEnabler.runClassicModeCycle(context)
+            // The auth-polling thread may be mid-probe; tryConnectWithTimeout
+            // would then return null at once and waste the retry.
+            awaitProbeIdle(PROBE_SOCKET_TIMEOUT_MS + 2_000L)
+            connectOnce()?.let { return it }
+        }
+
+        throw Exception("ADB auth pending - waiting for user to accept")
+    }
+
+    /**
+     * One connect attempt under [sharedDadbLock]. Returns the (possibly
+     * concurrently installed) shared connection, or null when the probe did
+     * not complete. Throws when the ADB port is closed.
+     */
+    private fun connectOnce(): SharedConn? {
         val tWait = System.currentTimeMillis()
         synchronized(sharedDadbLock) {
             val waited = System.currentTimeMillis() - tWait
@@ -716,12 +755,13 @@ class AdbShellExecutor(private val context: Context) {
 
             sharedConn?.let { return it }
 
-            // Check if ADB port is even listening before trying to connect
             if (!isAdbPortOpen()) {
+                // Upstream DI5 recovery (non-blocking, DiLink 5 mode only) on
+                // top of the BydAdbEnabler pass that already ran off-lock.
                 requestDiLink5AdbReenable()
                 watchDiLink5AdbPort()
-                logger.warn(TAG, "ADB port $ADB_PORT not open - ADB not enabled?")
-                throw Exception("ADB port not open")
+                logger.warn(TAG, "ADB port $ADB_PORT still not open after enabler")
+                throw Exception("ADB port not open (BYD enabler failed - see adb_fix.log)")
             }
 
             val adbKeyPair = getOrCreateAdbKeyPair()
@@ -735,10 +775,16 @@ class AdbShellExecutor(private val context: Context) {
             }
 
             // Try quick connection with timeout wrapper
-            val dadb = tryConnectWithTimeout(adbKeyPair, 2000)
-                ?: throw Exception("ADB auth pending - waiting for user to accept")
-
+            val dadb = tryConnectWithTimeout(adbKeyPair, 2000) ?: return null
             return installConnectionLocked(dadb)
+        }
+    }
+
+    /** Wait (off-lock) until no connect probe is in flight, up to [maxWaitMs]. */
+    private fun awaitProbeIdle(maxWaitMs: Long) {
+        val deadline = System.currentTimeMillis() + maxWaitMs
+        while (probeInFlight.get() && System.currentTimeMillis() < deadline) {
+            Thread.sleep(100)
         }
     }
 
@@ -1047,6 +1093,7 @@ class AdbShellExecutor(private val context: Context) {
     private fun tryConnectWithTimeout(keyPair: AdbKeyPair, timeoutMs: Long): Dadb? {
         if (!probeInFlight.compareAndSet(false, true)) {
             logger.debug(TAG, "Connection probe already in flight — treating this attempt as pending")
+            BydAdbEnabler.log(context, "dadb: başka bir bağlantı yoklaması sürüyor — deneme atlandı")
             return null
         }
         val lock = Object()
@@ -1080,7 +1127,13 @@ class AdbShellExecutor(private val context: Context) {
                     }
                 }
             } catch (e: Exception) {
-                synchronized(lock) { error = e }
+                val late = synchronized(lock) { error = e; abandoned }
+                // After the caller gave up nobody reads [error]; log it here so
+                // a silent adbd's eventual failure still reaches adb_fix.log.
+                if (late) {
+                    BydAdbEnabler.log(context, "dadb: geç bağlantı hatası (çağıran vazgeçmişti) → " +
+                        "${e.javaClass.name}: ${e.message}")
+                }
             } finally {
                 try { real?.close() } catch (ignored: Exception) {}
                 // Gate released by the THREAD, not the caller: the gate's job
@@ -1125,12 +1178,22 @@ class AdbShellExecutor(private val context: Context) {
         }
 
         synchronized(lock) {
-            result?.let { return it }
-            error?.let { throw it }
+            result?.let {
+                BydAdbEnabler.log(context, "dadb: bağlantı kuruldu ✓")
+                return it
+            }
+            error?.let {
+                // The exception text is what tells a silent auth wait, a reset
+                // socket and a TLS-only adbd (STLS instead of CNXN) apart.
+                BydAdbEnabler.log(context, "dadb: bağlantı hatası → ${it.javaClass.name}: ${it.message}" +
+                    (it.cause?.let { c -> " (neden: ${c.javaClass.name}: ${c.message})" } ?: ""))
+                throw it
+            }
             // Timed out — auth is pending. Abandon: the thread self-cleans
             // (closes a late success under this lock; a blocked probe read
             // throws within PROBE_SOCKET_TIMEOUT_MS) and releases the gate.
             logger.debug(TAG, "Connection timed out - auth likely pending; probe exits within ${PROBE_SOCKET_TIMEOUT_MS}ms")
+            BydAdbEnabler.log(context, "dadb: ${timeoutMs}ms içinde yanıt yok (izin bekleniyor ya da adbd sessiz)")
             abandoned = true
             connectThread.interrupt()
             return null

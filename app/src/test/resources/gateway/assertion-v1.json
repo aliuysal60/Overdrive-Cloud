@@ -1,0 +1,9 @@
+{
+  "note": "Test-only Ed25519 vector for the access assertion (seed bytes 1..32). Car-side verifiers must accept token for car at nowMs and reject tamperedToken.",
+  "seedHex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+  "publicKey": "ebVWLo_mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ",
+  "car": "abcdefghjkmn",
+  "nowMs": 1767225600000,
+  "token": "eyJ2IjoxLCJjYXIiOiJhYmNkZWZnaGprbW4iLCJzdWIiOiJsaW5rLXRlc3QtMSIsImlhdCI6MTc2NzIyNTYwMCwiZXhwIjoxNzY3MjI1NzIwfQ.b_J3pr6UVrVkFXWyQKwxvG9IujT3826Gav3VcOssaQ5YdbwRylY0go_R52eEn9lX8ZX7J_kninPluVSkEM0EBg",
+  "tamperedToken": "eyJ2IjoxLCJjYXIiOiJhYmNkZWZnaGprbW4iLCJzdWIiOiJsaW5rLXRlc3QtMSIsImlhdCI6MTc2NzIyNTYwMCwiZXhwIjoxNzY3MjI1NzIwfQ.b_J3pr6UVrVkFXWyQKwxvG9IujT3826Gav3VcOssaQ5YdbwRylY0go_R52eEn9lX8ZX7J_kninPluVSkEM0EAA"
+}

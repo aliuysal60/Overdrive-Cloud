@@ -143,6 +143,8 @@ public class ScratchRootLegacyIdentityTest {
 
         StringBuilder logPaths = new StringBuilder();
         for (String key : DaemonLogPaths.keys()) {
+            // FRP was added after the capture; its entry is checked below, not part of the legacy hash
+            if ("frp".equals(key)) continue;
             logPaths.append(key).append('=')
                     .append(DaemonLogPaths.pathFor(key)).append('\n');
         }
@@ -150,6 +152,7 @@ public class ScratchRootLegacyIdentityTest {
 
         StringBuilder sentinels = new StringBuilder();
         for (DaemonType type : DaemonType.values()) {
+            if (type == DaemonType.FRP_TUNNEL) continue;
             sentinels.append(type.name()).append('=')
                     .append(type.getSentinelPath()).append('\n');
         }
@@ -158,6 +161,12 @@ public class ScratchRootLegacyIdentityTest {
                 ParkedShutdown.MARKER_PATH + "\n" + ParkedShutdown.ENDED_PATH));
         actual.put("screenDeterrentDirectory", sha256(ScreenDeterrentAsset.DIRECTORY));
         return actual;
+    }
+
+    @Test
+    public void frpPathsLiveUnderTheLegacyRoot() {
+        assertEquals(LEGACY + "/.frp/frp.log", DaemonLogPaths.pathFor("frp"));
+        assertEquals(LEGACY + "/frp.disabled", DaemonType.FRP_TUNNEL.getSentinelPath());
     }
 
     @Test

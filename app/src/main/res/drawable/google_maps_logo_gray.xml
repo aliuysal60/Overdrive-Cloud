@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Transparent placeholder. Upstream's google_maps_logo_*.png assets are not in the
+  repository (.gitignore excludes *.png), so a clean checkout cannot link the
+  RoadSense Google attribution views. Replace with the official Google Maps logo
+  asset before using the Google Maps provider.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="59dp"
+    android:height="18dp"
+    android:viewportWidth="59"
+    android:viewportHeight="18">
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M0,0h59v18h-59z" />
+</vector>

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- strings_frp.xml — kendi sunucuda FRP tüneli -->
+<resources>
+    <string name="daemon_name_frp">OverDrive Bulut (FRP)</string>
+    <string name="daemon_config_no_frp">FRP sunucusu ayarlanmadı</string>
+    <string name="tunnel_label_frp">OverDrive Bulut</string>
+    <string name="dashboard_starting_frp">OverDrive Bulut\'a bağlanılıyor…</string>
+    <string name="dialog_frp_settings_title">FRP tüneli</string>
+    <string name="frp_settings_intro">Paneli kendi frps sunucun üzerinden yayınla. Port 443 = HTTPS ters vekil arkasındaki frps (ör. CapRover); diğer portlar = frps TCP portu.</string>
+    <string name="frp_server_hint">Sunucu (ör. byd.ornek.com)</string>
+    <string name="frp_port_hint">Sunucu portu</string>
+    <string name="frp_port_helper">CapRover / HTTPS ters vekil için 443</string>
+    <string name="frp_token_hint">frps kimlik doğrulama token\'ı</string>
+    <string name="frp_token_hint_keep">frps token\'ı (kayıtlı, korumak için boş bırak)</string>
+    <string name="frp_domain_hint">Genel alan adı (boş = sunucu)</string>
+    <string name="frp_token_storage_note">Token yalnızca araçta saklanır (OverDrive servisi okuyabilir); bir daha gösterilmez ve yedeklere girmez.</string>
+    <string name="frp_status_line">Durum: %1$s</string>
+    <string name="frp_state_connected">bağlı · %1$s</string>
+    <string name="frp_state_connecting">bağlanıyor…</string>
+    <string name="frp_state_error">hata (sunucu, token ve alan adını kontrol et)</string>
+    <string name="frp_state_stopped">durduruldu</string>
+    <string name="frp_state_unconfigured">ayarlanmadı</string>
+    <string name="frp_delete">Sil</string>
+    <string name="frp_delete_confirm">FRP tüneli ayarları bu araçtan silinsin mi?</string>
+    <string name="toast_frp_saved">FRP ayarları kaydedildi</string>
+    <string name="toast_frp_save_failed">Kaydedilemedi: %1$s</string>
+    <string name="toast_frp_deleted">FRP ayarları silindi</string>
+    <string name="toast_frp_daemon_unreachable">OverDrive servisine ulaşılamıyor</string>
+    <string name="dialog_cloud_title">OverDrive Bulut</string>
+    <string name="cloud_intro">Aracınıza her yerden ulaşmak için telefonunuzda %1$s adresini açın, Google ile giriş yapın ve bu QR kodu okutun ya da kodu girin.</string>
+    <string name="cloud_qr_description">Araç eşleştirme QR kodu</string>
+    <string name="cloud_not_enrolled">OverDrive Bulut kaydı henüz tamamlanmadı (internet bağlantısı bekleniyor).</string>
+    <string name="cloud_rotate">Kodu yenile</string>
+    <string name="cloud_rotate_confirm">Yeni kod oluşturulsun mu? Eski kod geçersiz olur; daha önce eklemiş hesaplar erişimini korur.</string>
+    <string name="cloud_rotated">Yeni kod oluşturuldu</string>
+    <string name="cloud_rotate_failed">Kod yenilenemedi: OverDrive Bulut\'a ulaşılamıyor</string>
+    <string name="cloud_own_server">Kendi sunucum</string>
+    <string name="cloud_own_server_confirm">Kendi frps sunucunuza geçilsin mi? Bu araç OverDrive Bulut\'tan ayrılır; telefonlardaki \"Araçlarım\" listesinden düşer.</string>
+    <string name="action_close">Kapat</string>
+    <string name="cloud_accounts_title">Bu araca erişen hesaplar</string>
+    <string name="cloud_accounts_empty">Henüz hiçbir hesap bu aracı eklemedi.</string>
+    <string name="cloud_accounts_unavailable">Hesap listesi alınamadı (OverDrive Bulut\'a ulaşılamıyor).</string>
+    <string name="cloud_account_last_used">son kullanım %1$s</string>
+    <string name="cloud_account_remove">Erişimi kaldır</string>
+    <string name="cloud_account_remove_confirm">%1$s bu araca erişemesin mi? Tekrar eklemek için güncel kod gerekir.</string>
+    <string name="cloud_account_removed">Erişim kaldırıldı</string>
+    <string name="frp_use_cloud">OverDrive Bulut\'u kullan (önerilir)</string>
+    <string name="frp_use_cloud_confirm">Kendi sunucu ayarları silinip araç OverDrive Bulut\'a kaydedilsin mi? Ekranda telefonla okutacağınız QR kod çıkar.</string>
+    <string name="frp_use_cloud_failed">OverDrive Bulut\'a ulaşılamadı. İnternet bağlantısını kontrol edip tekrar deneyin.</string>
+</resources>

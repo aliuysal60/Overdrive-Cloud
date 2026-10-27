@@ -185,6 +185,8 @@ public final class UpdateLifecycle {
                 "killall -9 tailscaled 2>/dev/null\n" +
                 psAwkKillLine("wgproxy") +
                 "killall -9 wgproxy 2>/dev/null\n" +
+                psAwkKillLine(".frp/run.sh") +
+                psAwkKillLine("odfrpc") +
                 "killall -9 sing-box 2>/dev/null\n" +
                 // Brief settle so SIGKILL'd daemons release their lockfiles
                 // before we rm the lock files. Without this delay, a daemon

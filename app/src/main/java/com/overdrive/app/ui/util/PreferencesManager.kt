@@ -17,6 +17,8 @@ object PreferencesManager {
     private const val TAG = "PreferencesManager"
     private const val PREFS_NAME = "overdrive_prefs"
     private const val KEY_ENABLED_DAEMONS = "enabled_daemons"
+    // set once the FRP tunnel was switched on for a cloud enrollment (a later user "off" sticks)
+    private const val KEY_FRP_CLOUD_AUTO_ENABLED = "frp_cloud_auto_enabled"
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_SELECTED_CAMERAS = "selected_cameras"
     private const val KEY_LAST_TUNNEL_URL = "last_tunnel_url"
@@ -142,6 +144,13 @@ object PreferencesManager {
         requirePrefs().edit().putStringSet(KEY_ENABLED_DAEMONS, current).commit()
     }
     
+    fun isFrpCloudAutoEnabled(): Boolean =
+        requirePrefs().getBoolean(KEY_FRP_CLOUD_AUTO_ENABLED, false)
+
+    fun setFrpCloudAutoEnabled() {
+        requirePrefs().edit().putBoolean(KEY_FRP_CLOUD_AUTO_ENABLED, true).commit()
+    }
+
     fun isDaemonEnabled(type: DaemonType): Boolean {
         return type in getEnabledDaemons()
     }

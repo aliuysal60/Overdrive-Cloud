@@ -5,6 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title data-i18n="app.login_title">Login - OverDrive</title>
     <link rel="icon" type="image/webp" href="../shared/app-icon-dark.webp">
+    <script>
+        // OverDrive Cloud: under the gateway (readable od_gw marker) the account is already signed
+        // in for this car, so skip the code login and go where the user was headed.
+        (function () {
+            if (!/(?:^|;\s*)od_gw=1(?:;|$)/.test(document.cookie)) return;
+            // bounced back within seconds: the car refused the gateway's word (e.g. not enrolled);
+            // return to the car list instead of looping between login and page
+            var KEY = 'od_gw_login_bounce';
+            var last = 0;
+            try { last = Number(sessionStorage.getItem(KEY)) || 0; sessionStorage.setItem(KEY, String(Date.now())); } catch (e) {}
+            if (Date.now() - last < 10000) { window.location.replace('/gw/'); return; }
+            var target = new URLSearchParams(window.location.search).get('redirect') || '/';
+            window.location.replace(target.charAt(0) === '/' && target.charAt(1) !== '/' ? target : '/');
+        })();
+    </script>
     <script src="../shared/theme.js?v=11"></script>
     <link rel="stylesheet" href="../shared/design-tokens.css">
     <style>

@@ -461,15 +461,36 @@ class DiagnosticsFragment : Fragment() {
         // Daemon is RUNNING. Read the saved probed camera id from config.
         var probedId = -1
         var manualOverride = false
+        var cameraMode = ""
+        var dilink5Mapping = ""
         try {
             val cfg = com.overdrive.app.config.UnifiedConfigManager.loadConfig()
             val cam = cfg.optJSONObject("camera")
             if (cam != null) {
                 probedId = cam.optInt("probedCameraId", -1)
                 manualOverride = cam.optBoolean("manualOverride", false)
+                cameraMode = cam.optString("cameraMode", "")
+                dilink5Mapping = cam.optString("dilink5CameraMapping", "")
             }
         } catch (_: Throwable) {
             // Defensive — fall through to "Probing…" if config read fails.
+        }
+
+        // DiLink 5 opens its four cameras through QCarCam with the chosen order; the
+        // AVMCamera probe that fills probedCameraId never runs there, so waiting for it
+        // would leave the tile on "Probing…" forever.
+        if (cameraMode == "dilink5") {
+            if (!com.overdrive.app.camera.dilink5.DiLink5Platform.hasDiLink5CameraHardware()) {
+                tv.text = getString(R.string.diagnostics_camera_value_dilink5_no_hardware)
+                dot.setBackgroundResource(R.drawable.status_dot_starting)
+            } else {
+                tv.text = getString(
+                    R.string.diagnostics_camera_value_dilink5,
+                    dilink5Mapping.ifBlank { getString(R.string.diagnostics_camera_dilink5_mapping_auto) },
+                )
+                dot.setBackgroundResource(R.drawable.status_dot_online)
+            }
+            return
         }
 
         when {

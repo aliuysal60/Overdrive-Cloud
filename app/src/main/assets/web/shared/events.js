@@ -1703,7 +1703,7 @@ BYD.events = {
                 (this.selectMode ? '' : 
                 '<div class="recording-actions">' +
                 '<button class="action-btn" onclick="event.stopPropagation(); BYD.events.createIncidentPack(\'' + recordingKey + '\')" title="Create AI evidence pack"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18"/><path d="M5 5l14 14"/></svg></button>' +
-                '<button class="action-btn" onclick="event.stopPropagation(); BYD.events.downloadVideo(\'' + recordingKey + '\')" title="' + BYD.i18n.t('common.download') + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>' +
+                '<button class="action-btn" onclick="event.stopPropagation(); BYD.events.downloadVideo(\'' + recordingKey + '\', this)" title="' + BYD.i18n.t('common.download') + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>' +
                 '<button class="action-btn delete" onclick="event.stopPropagation(); BYD.events.deleteRecording(\'' + recordingKey + '\')" title="' + BYD.i18n.t('common.delete') + '"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>' +
                 '</div>') +
                 '</div>' +
@@ -1790,6 +1790,12 @@ BYD.events = {
         const downloadBtn = document.getElementById('downloadBtn');
         downloadBtn.href = rec.videoUrl;
         downloadBtn.download = rec.filename;
+        // in-app download (progress, no full-screen preview on iPhone); the link stays as the fallback
+        downloadBtn.onclick = function (e) {
+            if (!(window.BYD && BYD.downloads)) return;
+            e.preventDefault();
+            BYD.downloads.save(rec.videoUrl, rec.filename, { button: downloadBtn });
+        };
         
         const player = document.getElementById('videoPlayer');
         player.setAttribute('playsinline', '');
@@ -1871,9 +1877,13 @@ BYD.events = {
         this.destroyTimeline();
     },
     
-    downloadVideo(recordingKey) {
+    downloadVideo(recordingKey, button) {
         const rec = this.findRecording(recordingKey);
         if (!rec) return;
+        if (BYD.downloads) {
+            BYD.downloads.save(rec.videoUrl, rec.filename, { button: button });
+            return;
+        }
         const a = document.createElement('a');
         a.href = rec.videoUrl;
         a.download = rec.filename;
@@ -1917,8 +1927,9 @@ BYD.events = {
             if (BYD.core && BYD.core.toast) {
                 BYD.core.toast('Evidence pack ready', 'success');
             }
-            window.location.href = '/api/genai/incidents/'
-                + encodeURIComponent(packId) + '/download';
+            const packUrl = '/api/genai/incidents/' + encodeURIComponent(packId) + '/download';
+            if (BYD.downloads) BYD.downloads.save(packUrl, '');
+            else window.location.href = packUrl;
         } catch (error) {
             if (BYD.core && BYD.core.toast) {
                 BYD.core.toast(error.message, 'error');

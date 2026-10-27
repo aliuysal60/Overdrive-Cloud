@@ -80,6 +80,7 @@ Enable your preferred tunnel (Zrok, Cloudflared or Tailscale).
 - **Optimized Recording Pipeline** — <28% CPU, ~150MB memory, <3s boot time
 - **Proximity Recording (Market First)** — Uses BYD's 8 parking radar sensors to trigger recording only when objects approach. Configurable trigger levels, pre-event buffer, and 500ms debouncing.
 - **Advanced Sentry Mode** — 24/7 surveillance with motion detection and AI object recognition
+- **Parked Keep-Alive (DiLink 5)** — Keeps the head unit awake while parked via OEM OTA-style CAN Network Management, so sentry/recording survives the vehicle's deep sleep. 12 V battery guard with configurable cutoff.
 - **Real-time Performance Monitor** — CPU, GPU, memory usage, and battery voltage dashboard
 - **ISP Blocklist Bypass** — Browse via BYD's built-in SIM card without a dedicated hotspot
 - **ADB Shell Runner** — Built-in terminal for running commands, checking processes, and viewing logs
@@ -341,6 +342,62 @@ render the blind-spot camera card black.
 from a clean clone, including for contributors, and the native build configures
 fine without the `od` source. Only release forks signed with a non-matching key
 are affected.
+
+## Parked Keep-Alive on DiLink 5 (Sleep Prevention)
+
+When a DiLink 5 vehicle is closed, the head unit enters deep sleep within
+minutes (`car_power_daemon → VHAL → CPMS → nativeForceSuspend`), which kills
+sentry mode, recording, network access — everything. **Parked keep-alive**
+holds the unit awake through the OEM's own mechanism, entirely from the app
+process, with no system modification.
+
+### How it works
+
+The vehicle's OTA update service exposes
+`com.ts.ota.otasdkmgr.IOtaSdkManager` (exported, no special permission
+required). Calling its `sendCanNM` transaction with `mode=0` asks the OTA
+framework to keep the CAN network managed and awake — the same lever BYD's
+own OTA updates use to keep the car alive while they install. The app binds
+that service, verifies the binder descriptor, sends the hold, and receives an
+asynchronous confirmation callback. The daemon re-asserts the hold every 30 s
+while parked and releases it on ignition, with a 12 V battery guard
+(configurable cutoff, default 11.8 V over 3 samples) that drops every lever on
+a low-voltage sequence.
+
+A/B measured on a Sealion 7 / Tang (SA8155, DiLink 5.1, 2026-10): with the
+hold active the unit stayed continuously awake for 27.5+ minutes parked and
+locked (historical baseline without it: 3–23 minutes to freeze); releasing the
+hold froze the unit **11 seconds** later.
+
+### Enabling it
+
+One toggle, no ADB and nothing installed on the vehicle: open **Settings →
+Parked keep-alive** (config key `surveillance.di5ParkedKeepAlive`) — the
+daemon does the rest automatically on every ACC-off transition. The transport
+itself (`CanNmLink.java`, pure Java) is part of the APK.
+
+> History: this transport was originally the closed-source `libodpark.so`,
+> which verifies the app's signing certificate against the upstream release
+> key and returns `-109 unauthorized` for any other signature — so self-built
+> APKs could never use it. Static analysis of the library recovered the full
+> wire protocol (endpoint, descriptor, transaction 135, hold/release modes,
+> callback handshake), and it was reimplemented in Java inside the app. The
+> transaction codes are resolved at runtime from the service APK itself via
+> `DexClassLoader`, with 135/11 as fallback, so AIDL reordering on future
+> firmware cannot misroute the call.
+
+### Notes per lever
+
+| Lever | Status on DiLink 5.1 (SL7/Tang) |
+|---|---|
+| Parked link (CAN NM) | ✅ Working — the mechanism described above |
+| MCU hold (`wakeUpMcu`, sentry flags) | ❌ Vendor stubs on this firmware (`getMcuStatus=-1`); logged as no-op, harmless |
+| MCU power hold (`-1442840502←1`) | ❌ Same — `BYDAutoPowerDevice` unavailable from any app/daemon context here |
+| Camera heartbeat / AP hold | Optional config-only levers, off by default |
+
+The BYD mobile app's vehicle query remains a useful wake-up fallback: it
+wakes the IVI over the always-on T-Box path, after which the daemon picks the
+hold back up where it left off (no reboot involved).
 
 ## VLESS Proxy Setup (Optional)
 

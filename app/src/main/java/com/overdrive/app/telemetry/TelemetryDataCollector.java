@@ -771,7 +771,18 @@ public class TelemetryDataCollector {
         }
 
         // Gearbox: gear mode (every poll — changes on shift)
-        if (gearboxDevice != null
+        if (diLink5) {
+            // DiLink 5: the gearbox device rejects uid 2000; GearMonitor carries the app
+            // process's bridged gear (Dilink5GearReader) with its freshness.
+            int candidate = com.overdrive.app.monitor.GearMonitor.getInstance()
+                    .getCurrentGearIfFresh();
+            if (isValidGearMode(candidate)) {
+                gearMode = candidate;
+                lastGearMode = candidate;
+                lastGearValid = true;
+                lastGearReadElapsedRealtimeMs = pollElapsedRealtimeMs;
+            }
+        } else if (gearboxDevice != null
                 && getGearboxAutoModeTypeMethod != null) {
             try {
                 int candidate =

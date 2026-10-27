@@ -104,6 +104,42 @@ public class TunnelDisplayPolicyTest {
         assertEquals("https://cloudflare.example", result.getUrl());
     }
 
+    @Test
+    public void connectedFrpTunnelRanksFirst() {
+        TunnelDisplayPolicy.Result result = TunnelDisplayPolicy.resolve(
+                "https://zrok.example", null, null, "https://car.example",
+                DaemonStatus.RUNNING, DaemonStatus.STOPPED, DaemonStatus.STOPPED,
+                DaemonStatus.RUNNING);
+
+        assertEquals(TunnelDisplayPolicy.Kind.ONLINE, result.getKind());
+        assertEquals("https://car.example", result.getUrl());
+    }
+
+    @Test
+    public void frpStatesMirrorTheOtherTunnels() {
+        assertEquals(TunnelDisplayPolicy.Kind.STARTING_FRP, resolveFrp(null, DaemonStatus.STARTING).getKind());
+        // running but not yet connected: frpc reports no URL until the proxy starts
+        assertEquals(TunnelDisplayPolicy.Kind.WAITING_FOR_URL, resolveFrp(null, DaemonStatus.RUNNING).getKind());
+        assertEquals(TunnelDisplayPolicy.Kind.FAILED, resolveFrp(null, DaemonStatus.ERROR).getKind());
+        assertEquals(TunnelDisplayPolicy.Kind.STOPPING, resolveFrp(null, DaemonStatus.STOPPING).getKind());
+        assertEquals(TunnelDisplayPolicy.Kind.HIDDEN,
+                resolveFrp("https://stale-car.example", DaemonStatus.STOPPED).getKind());
+    }
+
+    @Test
+    public void sixArgumentFormMeansNoFrpTunnel() {
+        assertEquals(
+                TunnelDisplayPolicy.resolve(null, "https://cf.example", null,
+                        DaemonStatus.STOPPED, DaemonStatus.RUNNING, DaemonStatus.STOPPED).getUrl(),
+                TunnelDisplayPolicy.resolve(null, "https://cf.example", null, null,
+                        DaemonStatus.STOPPED, DaemonStatus.RUNNING, DaemonStatus.STOPPED, null).getUrl());
+    }
+
+    private static TunnelDisplayPolicy.Result resolveFrp(String frpUrl, DaemonStatus frpStatus) {
+        return TunnelDisplayPolicy.resolve(null, null, null, frpUrl,
+                DaemonStatus.STOPPED, DaemonStatus.STOPPED, DaemonStatus.STOPPED, frpStatus);
+    }
+
     private static TunnelDisplayPolicy.Result resolve(
             String zrokUrl,
             String cloudflaredUrl,

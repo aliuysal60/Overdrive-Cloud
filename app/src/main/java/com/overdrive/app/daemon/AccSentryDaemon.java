@@ -1685,6 +1685,9 @@ public class AccSentryDaemon {
                 log("WARNING: Running without context");
             }
 
+            // DiLink 5 app-process producer watchdog; inert in every other mode (checked per tick).
+            AppProcessWatchdog.start();
+
             if (isDilink5CameraMode()) {
                 // DiLink 5 virtualizes the legacy bodywork HAL and can report
                 // sentinel/false-ON values. Poll its local Automotive power
@@ -6611,6 +6614,18 @@ public class AccSentryDaemon {
 
         @Override
         public Double readBatteryVoltage() {
+            Double direct = readBatteryVoltageFromDevice();
+            if (direct != null
+                    || !com.overdrive.app.camera.dilink5.DiLink5Platform.isSelected()) {
+                return direct;
+            }
+            // DiLink 5: the OTA device refuses this daemon's uid; the app process reads it and
+            // hands it over (Dilink5BatteryVoltageHint, NaN when not fresh)
+            return plausible12v(
+                    com.overdrive.app.power.Dilink5BatteryVoltageHint.readFreshVolts());
+        }
+
+        private Double readBatteryVoltageFromDevice() {
             try {
                 Object ota = com.overdrive.app.byd.BydDeviceHelper.getDevice(
                         "android.hardware.bydauto.ota.BYDAutoOtaDevice", appContext);
@@ -10363,7 +10378,8 @@ public class AccSentryDaemon {
             "telegram_bot_daemon",
             "start_zrok", "start_singbox", "start_cloudflared",
             "start_tailscale", "sentry_proxy", "sing-box",
-            "cloudflared", "zrok", "tailscaled", "wgproxy"
+            "cloudflared", "zrok", "tailscaled", "wgproxy",
+            ".frp/run.sh", "odfrpc"
         };
         for (int patternIndex = 0;
                 patternIndex < patterns.length;

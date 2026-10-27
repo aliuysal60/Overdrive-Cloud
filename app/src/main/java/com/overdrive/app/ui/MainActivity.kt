@@ -1083,7 +1083,7 @@ open class MainActivity : AppCompatActivity() {
         val channel = com.overdrive.app.config.UnifiedConfigManager.let {
             it.forceReload(); it.getUpdateChannel()
         }
-        if (channel == com.overdrive.app.updater.AppUpdater.CHANNEL_ALPHA) {
+        if (com.overdrive.app.updater.AppUpdater.isCatalogChannel(channel)) {
             checkAlphaVersions(updater, checkGeneration)
             return
         }
@@ -2413,6 +2413,12 @@ open class MainActivity : AppCompatActivity() {
             updateUrlDisplay()
         }
         
+        // Self-hosted FRP ranks first (TunnelDisplayPolicy): its fixed domain wins when connected
+        daemonsViewModel.frpController.tunnelUrl.observe(this) { url ->
+            if (!url.isNullOrEmpty()) mainViewModel.setTunnelUrl(url)
+            updateUrlDisplay()
+        }
+
         // Observe daemon states for tunnel status (cloudflared, zrok or tailscale)
         daemonsViewModel.daemonStates.observe(this) { states ->
             // A daemon transition must update the label as well as the dot.
@@ -2427,14 +2433,17 @@ open class MainActivity : AppCompatActivity() {
         val zrokUrl = daemonsViewModel.zrokController.tunnelUrl.value
         val cloudflaredUrl = daemonsViewModel.cloudflaredController.tunnelUrl.value
         val tailscaleUrl = daemonsViewModel.tailscaleController.tunnelUrl.value
+        val frpUrl = daemonsViewModel.frpController.tunnelUrl.value
         val states = daemonsViewModel.daemonStates.value
         val display = TunnelDisplayPolicy.resolve(
             zrokUrl,
             cloudflaredUrl,
             tailscaleUrl,
+            frpUrl,
             states?.get(DaemonType.ZROK_TUNNEL)?.status,
             states?.get(DaemonType.CLOUDFLARED_TUNNEL)?.status,
             states?.get(DaemonType.TAILSCALE_TUNNEL)?.status,
+            states?.get(DaemonType.FRP_TUNNEL)?.status,
         )
 
         statusPill.visibility = if (display.isVisible) View.VISIBLE else View.GONE
@@ -2446,6 +2455,8 @@ open class MainActivity : AppCompatActivity() {
                 getString(R.string.dashboard_starting_cloudflared)
             TunnelDisplayPolicy.Kind.STARTING_TAILSCALE ->
                 getString(R.string.dashboard_starting_tailscale)
+            TunnelDisplayPolicy.Kind.STARTING_FRP ->
+                getString(R.string.dashboard_starting_frp)
             TunnelDisplayPolicy.Kind.WAITING_FOR_URL ->
                 getString(R.string.dashboard_waiting_url)
             TunnelDisplayPolicy.Kind.STOPPING ->
@@ -2460,6 +2471,7 @@ open class MainActivity : AppCompatActivity() {
             TunnelDisplayPolicy.Kind.STARTING_ZROK,
             TunnelDisplayPolicy.Kind.STARTING_CLOUDFLARED,
             TunnelDisplayPolicy.Kind.STARTING_TAILSCALE,
+            TunnelDisplayPolicy.Kind.STARTING_FRP,
             TunnelDisplayPolicy.Kind.WAITING_FOR_URL,
             TunnelDisplayPolicy.Kind.STOPPING -> R.drawable.status_dot_starting
             TunnelDisplayPolicy.Kind.FAILED,

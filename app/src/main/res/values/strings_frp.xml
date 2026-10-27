@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- strings_frp.xml — self-hosted FRP tunnel -->
+<resources>
+    <string name="daemon_name_frp">OverDrive Cloud (FRP)</string>
+    <string name="daemon_config_no_frp">No FRP server configured</string>
+    <string name="tunnel_label_frp">OverDrive Cloud</string>
+    <string name="dashboard_starting_frp">Connecting to OverDrive Cloud…</string>
+    <string name="dialog_frp_settings_title">FRP tunnel</string>
+    <string name="frp_settings_intro">Publish the dashboard through your own frps server. Port 443 = frps behind an HTTPS reverse proxy (e.g. CapRover); any other port = the frps TCP port.</string>
+    <string name="frp_server_hint">Server (e.g. byd.example.com)</string>
+    <string name="frp_port_hint">Server port</string>
+    <string name="frp_port_helper">443 for CapRover / HTTPS reverse proxy</string>
+    <string name="frp_token_hint">frps auth token</string>
+    <string name="frp_token_hint_keep">frps auth token (saved, leave empty to keep)</string>
+    <string name="frp_domain_hint">Public domain (empty = server)</string>
+    <string name="frp_token_storage_note">The token is stored only on the car (readable by the OverDrive daemon) and is never shown again or included in backups.</string>
+    <string name="frp_status_line">Status: %1$s</string>
+    <string name="frp_state_connected">connected · %1$s</string>
+    <string name="frp_state_connecting">connecting…</string>
+    <string name="frp_state_error">error (check server, token, domain)</string>
+    <string name="frp_state_stopped">stopped</string>
+    <string name="frp_state_unconfigured">not configured</string>
+    <string name="frp_delete">Delete</string>
+    <string name="frp_delete_confirm">Delete the FRP tunnel settings from this car?</string>
+    <string name="toast_frp_saved">FRP settings saved</string>
+    <string name="toast_frp_save_failed">Could not save: %1$s</string>
+    <string name="toast_frp_deleted">FRP settings deleted</string>
+    <string name="toast_frp_daemon_unreachable">The OverDrive service is not reachable</string>
+    <string name="dialog_cloud_title">OverDrive Cloud</string>
+    <string name="cloud_intro">To reach your car from anywhere, open %1$s on your phone, sign in with Google and scan this QR code or enter the code.</string>
+    <string name="cloud_qr_description">Car pairing QR code</string>
+    <string name="cloud_not_enrolled">OverDrive Cloud enrollment is not finished yet (waiting for an internet connection).</string>
+    <string name="cloud_rotate">New code</string>
+    <string name="cloud_rotate_confirm">Create a new code? The old one stops working; accounts that already added the car keep their access.</string>
+    <string name="cloud_rotated">New code created</string>
+    <string name="cloud_rotate_failed">Could not renew the code: OverDrive Cloud is unreachable</string>
+    <string name="cloud_own_server">Own server</string>
+    <string name="cloud_own_server_confirm">Switch to your own frps server? This car leaves OverDrive Cloud and disappears from \"My cars\" on your phones.</string>
+    <string name="action_close">Close</string>
+    <string name="cloud_accounts_title">Accounts with access to this car</string>
+    <string name="cloud_accounts_empty">No account has added this car yet.</string>
+    <string name="cloud_accounts_unavailable">Could not load the account list (OverDrive Cloud is unreachable).</string>
+    <string name="cloud_account_last_used">last used %1$s</string>
+    <string name="cloud_account_remove">Remove access</string>
+    <string name="cloud_account_remove_confirm">Remove access for %1$s? Adding the car again needs the current code.</string>
+    <string name="cloud_account_removed">Access removed</string>
+    <string name="frp_use_cloud">Use OverDrive Cloud (recommended)</string>
+    <string name="frp_use_cloud_confirm">Remove the own-server settings and enroll this car with OverDrive Cloud? A QR code to scan with your phone appears next.</string>
+    <string name="frp_use_cloud_failed">Could not reach OverDrive Cloud. Check the internet connection and try again.</string>
+</resources>

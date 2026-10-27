@@ -87,6 +87,8 @@
         /* Sidebar entry — match existing .nav-link visual treatment */
         .nav-link.nav-link-update .upd-badge { margin-left:auto; background:var(--primary); color:var(--on-primary); font-size:11px; font-weight:700; padding:2px 8px; border-radius:var(--radius-full); line-height:1.2; }
         .nav-link.nav-link-update.has-update svg { color:var(--primary); }
+        .upd-pill { position:fixed; top:calc(10px + env(safe-area-inset-top)); right:72px; z-index:9000; display:flex; align-items:center; gap:6px; min-height:36px; padding:6px 14px; border:0; border-radius:var(--radius-full, 999px); background:var(--primary, #2563eb); color:var(--on-primary, #fff); font:600 13px/1.2 inherit; font-family:inherit; box-shadow:0 4px 14px rgba(0,0,0,.25); cursor:pointer; }
+        [dir="rtl"] .upd-pill { right:auto; left:72px; }
         /* Quiet dot for the alpha "newer exists" hint — subtler than the badge. */
         .nav-link.nav-link-update .upd-dot { margin-left:auto; width:8px; height:8px; border-radius:50%; background:var(--primary); flex:none; }
         [dir="rtl"] .nav-link.nav-link-update .upd-badge,
@@ -230,15 +232,19 @@
             // Alpha (archive): "Check for Updates" opens the version catalog
             // rather than a single install prompt. The /check response tells
             // us the channel so we don't need a second round-trip to decide.
-            if (res.channel === 'alpha') {
+            // OverDrive Cloud release server ("source":"cloud"): a single newest
+            // build whatever the channel, so never the alpha catalog.
+            if (res.channel === 'alpha' && res.source !== 'cloud') {
                 startCatalogFlow();
                 return;
             }
+            if (res.source === 'cloud') rememberPending(res);
             if (!res.available) {
+                setBadge(false, false);
                 // Braveheart, up to date. Show a small modal (not just a toast)
                 // so the channel switcher is reachable — this is where a
                 // braveheart user goes to switch back to Alpha.
-                showUpToDateModal(res.currentVersion || '', res.channel || 'braveheart');
+                showUpToDateModal(res.currentVersion || '', res.channel || 'braveheart', res.source === 'cloud');
                 return;
             }
             // Braveheart update available — fetch preview metadata + show modal.
@@ -345,7 +351,7 @@
     // Braveheart "up to date" — a small modal carrying the channel switcher so
     // the user can drop back to Alpha (the switcher is otherwise only in the
     // alpha catalog / braveheart confirm).
-    function showUpToDateModal(currentVersion, channel) {
+    function showUpToDateModal(currentVersion, channel, cloud) {
         injectStyles();
         closeModal();
         var bg = document.createElement('div');
@@ -355,9 +361,10 @@
             '<div class="upd-modal" role="dialog">' +
               UPD_DONE_ICON +
               '<h2>' + escapeHtml(BYD.i18n.t('update.latest_version', {version: currentVersion})) + '</h2>' +
+              (cloud ? '' :
               '<div id="updChannelMount"></div>' +
               '<div class="upd-channel-desc">' + escapeHtml(BYD.i18n.t('update.channel_braveheart_desc')) + '</div>' +
-              '<div id="updReportMount"></div>' +
+              '<div id="updReportMount"></div>') +
               '<div class="upd-actions">' +
                 '<button class="upd-btn upd-btn-cancel" id="updCatClose">' + escapeHtml(BYD.i18n.t('common.close')) + '</button>' +
               '</div>' +
@@ -955,7 +962,9 @@
     // user still taps to install, so the disabled-auto-update footgun (which
     // auto-installed) does not recur.
 
-    var CHECK_THROTTLE_MS = 6 * 60 * 60 * 1000; // 6h
+    // 1h: the OverDrive Cloud release server is ours (no GitHub rate limit), and
+    // a freshly published build should show up the same day.
+    var CHECK_THROTTLE_MS = 60 * 60 * 1000;
 
     function maybePassiveCheck(status) {
         var now = Date.now();
@@ -969,7 +978,8 @@
             var res = null;
             try { res = text ? JSON.parse(text) : null; } catch (e) {}
             if (!res || res.error) return;
-            if (res.channel === 'braveheart') {
+            if (res.channel === 'braveheart' || res.source === 'cloud') {
+                rememberPending(res);
                 if (res.available) {
                     setBadge(true, false);
                     notifyBraveheartAvailable(res, accOff);
@@ -983,6 +993,27 @@
                 checkAlphaNewer();
             }
         }).catch(function () { /* offline — try again next throttle window */ });
+    }
+
+    // The throttled check runs at most hourly, but the pill must stay on every
+    // page while an update is pending: remember it, and on each page load
+    // re-confirm it (cheap — only while one is pending).
+    function rememberPending(res) {
+        try { localStorage.setItem('upd_pending', res && res.available ? (res.remoteVersion || '?') : ''); } catch (e) {}
+    }
+
+    function restorePendingBadge() {
+        var pending = '';
+        try { pending = localStorage.getItem('upd_pending') || ''; } catch (e) {}
+        if (!pending) return;
+        setBadge(true, false);
+        fetch('/api/update/check').then(function (r) { return r.text(); }).then(function (text) {
+            var res = null;
+            try { res = text ? JSON.parse(text) : null; } catch (e) {}
+            if (!res || res.error) return;
+            rememberPending(res);
+            setBadge(!!res.available, false);
+        }).catch(function () {});
     }
 
     function notifyBraveheartAvailable(res, accOff) {
@@ -1027,8 +1058,30 @@
         }).catch(function () {});
     }
 
+    // Top-right "Update available" pill, shown with the badge on every page
+    // (the sidebar entry is hidden on phones and collapsed rails).
+    function setUpdatePill(show) {
+        var pill = $('updPill');
+        if (!show) {
+            if (pill) pill.remove();
+            return;
+        }
+        if (pill || !document.body) return;
+        var lang = String((window.BYD && BYD.i18n && typeof BYD.i18n.getLang === 'function' && BYD.i18n.getLang())
+            || document.documentElement.lang || navigator.language || '').toLowerCase();
+        pill = document.createElement('button');
+        pill.type = 'button';
+        pill.id = 'updPill';
+        pill.className = 'upd-pill';
+        pill.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>' +
+            '<span>' + escapeHtml(lang.indexOf('tr') === 0 ? 'Güncelleme var' : 'Update available') + '</span>';
+        pill.addEventListener('click', startCheckFlow);
+        document.body.appendChild(pill);
+    }
+
     // badge = prominent braveheart "update available"; dot = quiet alpha hint.
     function setBadge(showBadge, showDot) {
+        setUpdatePill(!!showBadge);
         var link = $('navUpdateLink');
         if (!link) return;
         link.classList.toggle('has-update', !!(showBadge || showDot));
@@ -1088,6 +1141,7 @@
         injectStyles();
         injectSidebarEntry();
         startVersionDriftWatch();
+        restorePendingBadge();
     }
 
     if (document.readyState === 'loading') {

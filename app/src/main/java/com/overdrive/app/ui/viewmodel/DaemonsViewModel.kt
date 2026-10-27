@@ -41,7 +41,7 @@ class DaemonsViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         const val LAUNCH_STATE_GRACE_MS = 60_000L
         val POLLED_TUNNELS = setOf(DaemonType.CLOUDFLARED_TUNNEL, DaemonType.ZROK_TUNNEL,
-            DaemonType.TAILSCALE_TUNNEL, DaemonType.WIREGUARD_TUNNEL)
+            DaemonType.TAILSCALE_TUNNEL, DaemonType.WIREGUARD_TUNNEL, DaemonType.FRP_TUNNEL)
     }
 
     // A stop pressed mid-launch owns an optional daemon's card; late launch results must not overwrite it.
@@ -111,6 +111,9 @@ class DaemonsViewModel(app: Application) : AndroidViewModel(app) {
 
     // Expose wireguard controller for status and config checks
     val wireguardController: WireGuardController
+
+    // Expose FRP controller for tunnel URL access
+    val frpController: FrpController
     
     // Expose camera daemon controller for startup manager
     val cameraDaemonController: CameraDaemonController
@@ -142,6 +145,7 @@ class DaemonsViewModel(app: Application) : AndroidViewModel(app) {
         zrokController = ZrokController(app, adbLauncher)
         tailscaleController = TailscaleController(app, adbLauncher)
         wireguardController = WireGuardController(app, adbLauncher)
+        frpController = FrpController(app, adbLauncher)
         cameraDaemonController = CameraDaemonController(app, adbLauncher)
         singboxController = SingboxController(app, adbLauncher)
         
@@ -154,6 +158,7 @@ class DaemonsViewModel(app: Application) : AndroidViewModel(app) {
             DaemonType.ZROK_TUNNEL to zrokController,
             DaemonType.TAILSCALE_TUNNEL to tailscaleController,
             DaemonType.WIREGUARD_TUNNEL to wireguardController,
+            DaemonType.FRP_TUNNEL to frpController,
             DaemonType.TELEGRAM_DAEMON to TelegramDaemonController(adbLauncher)
         )
         
@@ -195,6 +200,7 @@ class DaemonsViewModel(app: Application) : AndroidViewModel(app) {
                 refreshDaemonStatus(DaemonType.ZROK_TUNNEL)
                 refreshDaemonStatus(DaemonType.TAILSCALE_TUNNEL)
                 refreshDaemonStatus(DaemonType.WIREGUARD_TUNNEL)
+                refreshDaemonStatus(DaemonType.FRP_TUNNEL)
                 if (!tunnelPollStopped) tunnelPollHandler?.postDelayed(this, 30000)
             }
         }
@@ -366,6 +372,33 @@ class DaemonsViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    /** New FRP identity (e.g. switched to OverDrive Cloud): restart frpc when it runs, start it otherwise. */
+    fun startOrRestartFrp() {
+        frpController.isRunning { running ->
+            if (running) restartFrpIfRunning() else startDaemon(DaemonType.FRP_TUNNEL)
+        }
+    }
+
+    /** Apply saved FRP settings: restart frpc when it runs, otherwise just refresh the card. */
+    fun restartFrpIfRunning() {
+        val type = DaemonType.FRP_TUNNEL
+        frpController.isRunning { running ->
+            if (!running) {
+                refreshDaemonStatus(type)
+                return@isRunning
+            }
+            frpController.restart(object : DaemonCallback {
+                override fun onStatusChanged(status: DaemonStatus, message: String) {
+                    updateState(type, status, message)
+                }
+
+                override fun onError(error: String) {
+                    updateState(type, DaemonStatus.ERROR, error)
+                }
+            })
+        }
+    }
+
     /** Restart the WireGuard tunnel to apply a changed launch option. No-op sentinel/pref changes. */
     fun restartWireGuard() {
         val type = DaemonType.WIREGUARD_TUNNEL
@@ -477,6 +510,18 @@ class DaemonsViewModel(app: Application) : AndroidViewModel(app) {
                 doRefreshDaemonStatus(type, controller, logResult)
             }
             return
+        } else if (type == DaemonType.FRP_TUNNEL) {
+            frpController.hasConfig { configured ->
+                if (!configured) {
+                    updateFrpNeedsConfig(appStr(R.string.daemon_config_no_frp))
+                    if (logResult) {
+                        LogManager.getInstance().debug("Daemons", "${type.name}: No config")
+                    }
+                    return@hasConfig
+                }
+                doRefreshDaemonStatus(type, controller, logResult)
+            }
+            return
         }
         
         doRefreshDaemonStatus(type, controller, logResult)
@@ -544,6 +589,16 @@ class DaemonsViewModel(app: Application) : AndroidViewModel(app) {
                                             LogManager.getInstance().debug("Daemons", "  └─ ${sp.name} (PID: ${sp.pid}, uptime: ${sp.uptime})")
                                         }
                                     }
+                                }
+                            }
+                        } else if (type == DaemonType.FRP_TUNNEL) {
+                            // For FRP, the URL shows once frpc reports the proxy as started
+                            frpController.refreshTunnelUrl { url ->
+                                val statusText = url ?: appStr(R.string.frp_state_connecting)
+                                updateStateWithSubprocesses(type, DaemonStatus.RUNNING, statusText, uptime, subprocesses)
+                                if (logResult) {
+                                    val uptimeStr = uptime?.let { " (uptime: $it)" } ?: ""
+                                    LogManager.getInstance().info("Daemons", "${type.name}: Running$uptimeStr - $statusText")
                                 }
                             }
                         } else if (type == DaemonType.WIREGUARD_TUNNEL) {
@@ -626,6 +681,7 @@ class DaemonsViewModel(app: Application) : AndroidViewModel(app) {
             DaemonType.ZROK_TUNNEL -> "zrok share"
             DaemonType.TAILSCALE_TUNNEL -> "tailscaled"
             DaemonType.WIREGUARD_TUNNEL -> "wgproxy"
+            DaemonType.FRP_TUNNEL -> com.overdrive.app.frp.FrpPaths.PROCESS_NAME
             DaemonType.TELEGRAM_DAEMON -> "telegram_bot_daemon"
         }
     }
@@ -640,6 +696,7 @@ class DaemonsViewModel(app: Application) : AndroidViewModel(app) {
             DaemonType.ZROK_TUNNEL -> listOf("zrok")
             DaemonType.TAILSCALE_TUNNEL -> listOf("tailscaled")
             DaemonType.WIREGUARD_TUNNEL -> listOf("wgproxy")
+            DaemonType.FRP_TUNNEL -> listOf(com.overdrive.app.frp.FrpPaths.PROCESS_NAME)
             DaemonType.TELEGRAM_DAEMON -> listOf("telegram_bot_daemon")
         }
     }
@@ -725,6 +782,14 @@ class DaemonsViewModel(app: Application) : AndroidViewModel(app) {
     fun updateWireGuardNeedsConfig(message: String) {
         publishState(DaemonType.WIREGUARD_TUNNEL,
             DaemonState.needsConfig(DaemonType.WIREGUARD_TUNNEL, message))
+    }
+
+    /**
+     * Update FRP state to indicate configuration is needed.
+     */
+    fun updateFrpNeedsConfig(message: String) {
+        publishState(DaemonType.FRP_TUNNEL,
+            DaemonState.needsConfig(DaemonType.FRP_TUNNEL, message))
     }
     
     /**

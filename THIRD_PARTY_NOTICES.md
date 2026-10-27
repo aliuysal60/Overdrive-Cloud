@@ -14,6 +14,7 @@ own license — those licenses, not MIT, govern those components.
 | sing-box | https://github.com/SagerNet/sing-box | see upstream | **GPL-3.0-or-later** | No |
 | tailscale | https://github.com/tailscale/tailscale | v1.96.4 | BSD-3-Clause | **Yes** — see "Modifications" below |
 | wgproxy (`libwireguard.so`) | OverDrive's own [`tools/wireguard`](tools/wireguard), built on [wireguard-go](https://git.zx2c4.com/wireguard-go) | pinned in `tools/wireguard/go.mod` | MIT (OverDrive code and wireguard-go); bundles gVisor netstack (Apache-2.0) and golang.org/x/{crypto,net,sys,time} (BSD-3-Clause) | No — upstream modules are used unmodified |
+| frpc (`libfrpc.so`) | https://github.com/fatedier/frp | v0.61.1 (official android_arm64 release) | Apache-2.0 | No |
 
 ## Machine-learning models (`app/src/main/assets/models/`)
 

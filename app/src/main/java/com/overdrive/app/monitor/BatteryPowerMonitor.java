@@ -25,6 +25,9 @@ public class BatteryPowerMonitor extends BaseDeviceMonitor<BatteryPowerData> {
     // that never clears; reconnecting every 30 s only floods the log.
     private static final long DI5_DAEMON_DENIED_RECONNECT_MS = 10 * 60_000L;
     private volatile boolean bindDeniedOnDi5Daemon = false;
+    // DiLink 5 daemon: the OTA device refuses uid 2000, so the voltage comes from the app process
+    // through Dilink5BatteryVoltageHint instead
+    private volatile boolean di5HintMode = false;
     
     public BatteryPowerMonitor() {
         super("BatteryPowerMonitor");
@@ -34,6 +37,13 @@ public class BatteryPowerMonitor extends BaseDeviceMonitor<BatteryPowerData> {
     public void init(Context context) {
         this.context = context;
         bindDeniedOnDi5Daemon = false;
+        di5HintMode = com.overdrive.app.camera.dilink5.DiLink5Platform.isSelected()
+                && android.os.Process.myUid() < android.os.Process.FIRST_APPLICATION_UID;
+        if (di5HintMode) {
+            log("DiLink 5 daemon: battery voltage from the app process (Dilink5BatteryVoltageHint)");
+            markAvailable();
+            return;
+        }
         
         try {
             log("Initializing BYDAutoOtaDevice via reflection...");
@@ -87,7 +97,7 @@ public class BatteryPowerMonitor extends BaseDeviceMonitor<BatteryPowerData> {
     
     @Override
     public void start() {
-        if (device == null) {
+        if (device == null && !di5HintMode) {
             logError("Cannot start - device not initialized", null);
             return;
         }
@@ -103,10 +113,20 @@ public class BatteryPowerMonitor extends BaseDeviceMonitor<BatteryPowerData> {
             
             while (isRunning.get()) {
                 try {
-                    // Poll voltage via reflection
-                    Class<?> deviceClass = device.getClass();
-                    Method getBatteryPowerVoltage = deviceClass.getMethod("getBatteryPowerVoltage");
-                    double voltage = (Double) getBatteryPowerVoltage.invoke(device);
+                    double voltage;
+                    if (di5HintMode) {
+                        voltage = com.overdrive.app.power.Dilink5BatteryVoltageHint.readFreshVolts();
+                        if (Double.isNaN(voltage)) {
+                            // no fresh app reading: no sample, never a made-up one
+                            Thread.sleep(POLL_INTERVAL_MS);
+                            continue;
+                        }
+                    } else {
+                        // Poll voltage via reflection
+                        Class<?> deviceClass = device.getClass();
+                        Method getBatteryPowerVoltage = deviceClass.getMethod("getBatteryPowerVoltage");
+                        voltage = (Double) getBatteryPowerVoltage.invoke(device);
+                    }
                     
                     BatteryPowerData oldData = cachedData.get();
                     BatteryPowerData newData = new BatteryPowerData(voltage);

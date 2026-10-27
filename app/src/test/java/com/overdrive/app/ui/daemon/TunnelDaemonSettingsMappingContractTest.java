@@ -24,6 +24,8 @@ public class TunnelDaemonSettingsMappingContractTest {
         assertTrue(fragment.contains(
                 "DaemonType.WIREGUARD_TUNNEL -> showWireGuardSettingsDialog()"));
         assertTrue(fragment.contains(
+                "DaemonType.FRP_TUNNEL -> FrpSettingsDialog.show(requireContext(), daemonsViewModel)"));
+        assertTrue(fragment.contains(
                 "DaemonType.CLOUDFLARED_TUNNEL -> {"));
         assertTrue(fragment.contains(
                 "CloudflaredPaidConfig.showSettingsDialog(requireContext(), daemonsViewModel)"));
@@ -39,6 +41,11 @@ public class TunnelDaemonSettingsMappingContractTest {
         assertTrue(wireguard.contains(
                 "inflate(R.layout.dialog_wireguard_settings, null)"));
 
+        String frp = read(
+                "app/src/main/java/com/overdrive/app/ui/daemon/FrpSettingsDialog.kt");
+        assertTrue(frp.contains(
+                "inflate(R.layout.dialog_frp_settings, null)"));
+
         String cloudflare = read(
                 "app/src/main/java/com/overdrive/app/config/CloudflaredPaidConfig.kt");
         assertTrue(cloudflare.contains(
@@ -51,7 +58,8 @@ public class TunnelDaemonSettingsMappingContractTest {
                 "app/src/main/java/com/overdrive/app/ui/adapter/DaemonAdapter.kt");
 
         for (String type : new String[] {
-                "CLOUDFLARED_TUNNEL", "ZROK_TUNNEL", "TAILSCALE_TUNNEL", "WIREGUARD_TUNNEL"
+                "CLOUDFLARED_TUNNEL", "ZROK_TUNNEL", "TAILSCALE_TUNNEL", "WIREGUARD_TUNNEL",
+                "FRP_TUNNEL"
         }) {
             assertTrue(adapter.contains("state.type == DaemonType." + type));
         }
@@ -72,12 +80,15 @@ public class TunnelDaemonSettingsMappingContractTest {
                 "DaemonType.TAILSCALE_TUNNEL to tailscaleController"));
         assertTrue(viewModel.contains(
                 "DaemonType.WIREGUARD_TUNNEL to wireguardController"));
+        assertTrue(viewModel.contains(
+                "DaemonType.FRP_TUNNEL to frpController"));
 
         assertControllerType(
                 "CloudflaredController.kt", "CLOUDFLARED_TUNNEL");
         assertControllerType("ZrokController.kt", "ZROK_TUNNEL");
         assertControllerType("TailscaleController.kt", "TAILSCALE_TUNNEL");
         assertControllerType("WireGuardController.kt", "WIREGUARD_TUNNEL");
+        assertControllerType("FrpController.kt", "FRP_TUNNEL");
     }
 
     @Test

@@ -12,6 +12,7 @@ public final class TunnelDisplayPolicy {
         STARTING_ZROK,
         STARTING_CLOUDFLARED,
         STARTING_TAILSCALE,
+        STARTING_FRP,
         WAITING_FOR_URL,
         STOPPING,
         FAILED,
@@ -53,6 +54,25 @@ public final class TunnelDisplayPolicy {
                                  DaemonStatus zrokStatus,
                                  DaemonStatus cloudflaredStatus,
                                  DaemonStatus tailscaleStatus) {
+        return resolve(zrokUrl, cloudflaredUrl, tailscaleUrl, null,
+                zrokStatus, cloudflaredStatus, tailscaleStatus, null);
+    }
+
+    /**
+     * With the self-hosted FRP tunnel, which ranks first: it is the user's own server with a fixed
+     * domain. Null FRP arguments mean "no FRP tunnel" (the six-argument form).
+     */
+    public static Result resolve(String zrokUrl,
+                                 String cloudflaredUrl,
+                                 String tailscaleUrl,
+                                 String frpUrl,
+                                 DaemonStatus zrokStatus,
+                                 DaemonStatus cloudflaredStatus,
+                                 DaemonStatus tailscaleStatus,
+                                 DaemonStatus frpStatus) {
+        if (isActiveUrl(frpUrl, frpStatus)) {
+            return new Result(Kind.ONLINE, frpUrl);
+        }
         if (isActiveUrl(zrokUrl, zrokStatus)) {
             return new Result(Kind.ONLINE, zrokUrl);
         }
@@ -72,22 +92,28 @@ public final class TunnelDisplayPolicy {
         if (tailscaleStatus == DaemonStatus.STARTING) {
             return new Result(Kind.STARTING_TAILSCALE, null);
         }
+        if (frpStatus == DaemonStatus.STARTING) {
+            return new Result(Kind.STARTING_FRP, null);
+        }
 
         if (zrokStatus == DaemonStatus.RUNNING
                 || cloudflaredStatus == DaemonStatus.RUNNING
-                || tailscaleStatus == DaemonStatus.RUNNING) {
+                || tailscaleStatus == DaemonStatus.RUNNING
+                || frpStatus == DaemonStatus.RUNNING) {
             return new Result(Kind.WAITING_FOR_URL, null);
         }
         // A tunnel still shutting down is up and reachable — keep the pill.
         if (zrokStatus == DaemonStatus.STOPPING
                 || cloudflaredStatus == DaemonStatus.STOPPING
-                || tailscaleStatus == DaemonStatus.STOPPING) {
+                || tailscaleStatus == DaemonStatus.STOPPING
+                || frpStatus == DaemonStatus.STOPPING) {
             return new Result(Kind.STOPPING, null);
         }
         // Keep a died tunnel visible; HIDDEN would remove the pill and show nothing.
         if (zrokStatus == DaemonStatus.ERROR
                 || cloudflaredStatus == DaemonStatus.ERROR
-                || tailscaleStatus == DaemonStatus.ERROR) {
+                || tailscaleStatus == DaemonStatus.ERROR
+                || frpStatus == DaemonStatus.ERROR) {
             return new Result(Kind.FAILED, null);
         }
         return new Result(Kind.HIDDEN, null);

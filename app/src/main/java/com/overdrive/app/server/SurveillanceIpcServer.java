@@ -422,6 +422,14 @@ public class SurveillanceIpcServer implements Runnable {
                         }
                         com.overdrive.app.byd.BydVehicleData snapshot =
                                 com.overdrive.app.byd.BydVehicleData.fromJson(data);
+                        // Before the snapshot is accepted: acceptance keeps a gearbox-device gear
+                        // through a stale car_service dynamics rail only while this time is fresh.
+                        com.overdrive.app.byd.BydDataCollector.getInstance()
+                                .noteDiLink5GearObservedAt(
+                                        request.optLong("gearObservedElapsedMs", 0L));
+                        com.overdrive.app.byd.BydDataCollector.getInstance()
+                                .noteDiLink5SpeedObservedAt(
+                                        request.optLong("speedObservedElapsedMs", 0L));
                         // Stage 0 diagnostic echo; never allowed to disturb the telemetry path.
                         try {
                             com.overdrive.app.byd.BydDataCollector.getInstance()
@@ -2201,7 +2209,8 @@ public class SurveillanceIpcServer implements Runnable {
         com.overdrive.app.config.UnifiedConfigManager.forceReload();
         String channel = com.overdrive.app.config.UnifiedConfigManager.getUpdateChannel();
         response.put("channel", channel);
-        if (com.overdrive.app.updater.AppUpdater.CHANNEL_ALPHA.equals(channel)) {
+        if (com.overdrive.app.updater.CloudReleases.ENABLED) response.put("source", "cloud");
+        if (com.overdrive.app.updater.AppUpdater.isCatalogChannel(channel)) {
             response.put("success", true);
             response.put("available", false);
             response.put("currentVersion",
@@ -2438,7 +2447,7 @@ public class SurveillanceIpcServer implements Runnable {
             String activeChannel = com.overdrive.app.config.UnifiedConfigManager.getUpdateChannel();
             // Strict tag validation (not a loose prefix) + channel match.
             if (!com.overdrive.app.updater.AppUpdater.isValidAlphaTag(version)
-                    || !com.overdrive.app.updater.AppUpdater.CHANNEL_ALPHA.equals(activeChannel)) {
+                    || !com.overdrive.app.updater.AppUpdater.isCatalogChannel(activeChannel)) {
                 com.overdrive.app.updater.AppUpdater.endInstall();
                 try { updater.close(); } catch (Exception ignored) {}
                 response.put("success", false);

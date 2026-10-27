@@ -27,6 +27,7 @@ import com.overdrive.app.R
 import com.overdrive.app.config.UnifiedConfigManager
 import com.overdrive.app.ui.model.DaemonStatus
 import com.overdrive.app.ui.daemon.WireGuardSettingsDialog
+import com.overdrive.app.ui.daemon.FrpSettingsDialog
 import com.overdrive.app.ui.util.QrCodeGenerator
 import com.overdrive.app.util.DaemonHttpClient
 import org.json.JSONObject
@@ -275,6 +276,7 @@ class DaemonsFragment : Fragment() {
             DaemonType.ZROK_TUNNEL -> showZrokTokenDialog()
             DaemonType.TAILSCALE_TUNNEL -> showTailscaleSettingsDialog()
             DaemonType.WIREGUARD_TUNNEL -> showWireGuardSettingsDialog()
+            DaemonType.FRP_TUNNEL -> FrpSettingsDialog.show(requireContext(), daemonsViewModel)
             DaemonType.CLOUDFLARED_TUNNEL -> {
                 com.overdrive.app.config.CloudflaredPaidConfig.showSettingsDialog(requireContext(), daemonsViewModel)
             }

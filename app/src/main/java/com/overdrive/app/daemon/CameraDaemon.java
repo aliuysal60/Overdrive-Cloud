@@ -806,6 +806,8 @@ public class CameraDaemon {
 
         new Thread(tcpServer::start, "TcpServer").start();
         new Thread(httpServer::start, "HttpServer").start();
+        // OverDrive Cloud: self-enroll with the gateway on first start (retries in the background)
+        com.overdrive.app.frp.CloudEnrollment.startInBackground();
         new Thread(ipcServer, "SurveillanceIPC").start();
         new Thread(aacIngestServer, "AacIngest").start();
 
@@ -10539,6 +10541,9 @@ public class CameraDaemon {
         com.overdrive.app.notifications.NotificationBus.get()
                 .subscribe(new com.overdrive.app.notifications.sinks.PushSink(
                         subStore, registry, keyStore, signer));
+        // OverDrive Cloud: the same events also reach accounts linked through the gateway
+        com.overdrive.app.notifications.NotificationBus.get()
+                .subscribe(new com.overdrive.app.notifications.sinks.CloudPushSink(registry));
         // Forward WARN/CRITICAL vehicle events (charging fault/full, door
         // opened, tyre alarm/leak, SOH mismatch) to Telegram too — they were
         // Web-Push-only before. Excludes surveillance.* (delivered to Telegram

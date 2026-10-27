@@ -79,8 +79,10 @@ public class UpdateCommandHandler implements TelegramCommandHandler {
 
         String channel = resp.optString("channel", CHANNEL_ALPHA);
         // Alpha → browse-and-pick: list the archive instead of a single
-        // Install button.
-        if (CHANNEL_ALPHA.equals(channel)) {
+        // Install button. Release-server updates ("source":"cloud") have no
+        // archive — a single newest build, like braveheart.
+        boolean cloud = "cloud".equals(resp.optString("source", ""));
+        if (CHANNEL_ALPHA.equals(channel) && !cloud) {
             handleListAlpha(chatId, ctx);
             return;
         }
@@ -96,6 +98,10 @@ public class UpdateCommandHandler implements TelegramCommandHandler {
             return;
         }
 
+        if (!available && cloud) {
+            ctx.sendMessage(chatId, ctx.tr("update.up_to_date", currentVersion));
+            return;
+        }
         if (!available) {
             String[][][] buttons = {
                     {{ctx.tr("update.switch_alpha_all_button"), "cmd:/update channel alpha"}}
@@ -117,11 +123,14 @@ public class UpdateCommandHandler implements TelegramCommandHandler {
             text = ctx.tr("update.available", currentVersion, remoteVersion);
         }
 
-        String[][][] buttons = {
-                {{ctx.tr("update.install_now_button"), "cmd:/update install"}},
-                {{ctx.tr("update.switch_alpha_button"), "cmd:/update channel alpha"}},
-                {{ctx.tr("common.cancel_button"), "cmd:/help"}}
-        };
+        String[][][] buttons = cloud
+                ? new String[][][]{
+                        {{ctx.tr("update.install_now_button"), "cmd:/update install"}},
+                        {{ctx.tr("common.cancel_button"), "cmd:/help"}}}
+                : new String[][][]{
+                        {{ctx.tr("update.install_now_button"), "cmd:/update install"}},
+                        {{ctx.tr("update.switch_alpha_button"), "cmd:/update channel alpha"}},
+                        {{ctx.tr("common.cancel_button"), "cmd:/help"}}};
         ctx.sendMessageWithButtons(chatId, text, buttons);
     }
 

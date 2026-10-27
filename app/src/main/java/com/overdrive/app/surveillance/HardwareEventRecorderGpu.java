@@ -157,6 +157,9 @@ public class HardwareEventRecorderGpu {
     private volatile MediaMuxer muxer;
     private volatile int trackIndex = -1;
     private volatile int audioTrackIndex = -1;
+    // Salvage journal of the live segment (Mp4Salvage): lets a segment cut off before
+    // muxer.stop() be rebuilt instead of reaped as an orphan .mp4.tmp.
+    private volatile Mp4Salvage.Journal salvageJournal;
     private volatile boolean muxerStarted = false;
 
     // Audio muxing: enabled at recording-start time when (a) the user has
@@ -741,6 +744,8 @@ public class HardwareEventRecorderGpu {
                 ? (RuntimeException) e : new RuntimeException(e);
         }
         info.presentationTimeUs = absolutePts;
+        Mp4Salvage.Journal journal = salvageJournal;
+        if (journal != null) journal.append(info.size, rebasedPts, info.flags);
         // Track REBASED PTS for duration computation. The close path uses
         // (lastFramePtsUs - firstFramePtsUs) which on a rebased timeline
         // is just lastFramePtsUs (since firstFramePtsUs == 0).
@@ -3303,6 +3308,7 @@ public class HardwareEventRecorderGpu {
                     audioTrackIndex = maybeAddAudioTrack(muxer);
                     muxer.start();
                     muxerStarted = true;
+                    salvageJournal = Mp4Salvage.Journal.open(tempFile, savedFormat);
                     logger.info("Muxer started with saved format (videoTrack="
                         + trackIndex + ", audioTrack=" + audioTrackIndex + ")");
                     muxerOk = true;
@@ -3525,6 +3531,9 @@ public class HardwareEventRecorderGpu {
                 trackIndex = -1;
                 audioTrackIndex = -1;
             }
+            Mp4Salvage.Journal abandoned = salvageJournal;
+            salvageJournal = null;
+            if (abandoned != null) abandoned.discard();
             if (tempFile != null && tempFile.exists()) tempFile.delete();
             tempFile = null;
             isWritingToFile = false;
@@ -3912,6 +3921,8 @@ public class HardwareEventRecorderGpu {
             seg.trackIndex = trackIndex;
             seg.audioTrackIndex = audioTrackIndex;
             seg.tempFile = tempFile;
+            seg.salvageJournal = salvageJournal;
+            salvageJournal = null;
             seg.outputPath = outputPath;
             seg.segmentNumber = segmentNumber;
             seg.ptsOriginUs = ptsOriginUs;
@@ -4028,6 +4039,7 @@ public class HardwareEventRecorderGpu {
     private static final class ClosingSegment {
         MediaMuxer muxer;
         boolean muxerStarted;
+        Mp4Salvage.Journal salvageJournal;
         int trackIndex = -1;
         int audioTrackIndex = -1;
         File tempFile;
@@ -4085,6 +4097,7 @@ public class HardwareEventRecorderGpu {
         } finally {
             info.presentationTimeUs = absolutePts;
         }
+        if (seg.salvageJournal != null) seg.salvageJournal.append(info.size, rebasedPts, info.flags);
         if (seg.firstFramePtsUs < 0) seg.firstFramePtsUs = rebasedPts;
         seg.lastFramePtsUs = rebasedPts;
         seg.recordedFrames++;
@@ -4408,6 +4421,12 @@ public class HardwareEventRecorderGpu {
                 logger.warn("Deleting empty/corrupt temp file: " + tempFile.getName() +
                         " (frames=" + seg.recordedFrames + ", size=" + tempFile.length() + ")");
                 tempFile.delete();
+            }
+
+            // The tmp is now final, quarantined or gone: its salvage journal is not needed.
+            if (seg.salvageJournal != null) {
+                seg.salvageJournal.discard();
+                seg.salvageJournal = null;
             }
 
             // Every FAILURE branch above unlinks (or renames to .broken) a

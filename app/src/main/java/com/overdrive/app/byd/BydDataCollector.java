@@ -398,6 +398,8 @@ public class BydDataCollector {
     static final long DILINK5_AUTOMATION_MAX_AGE_MS = 15_000L;
     private static final long DILINK5_DYNAMIC_MAX_AGE_MS =
             CarSvcTelemetry.DUMP_TTL_MS + 1_000L;
+    /** A bridged gearbox-device gear, as GearMonitor's bridge read (DILINK5_BRIDGE_GEAR_MAX_AGE_MS). */
+    static final long DILINK5_BRIDGED_GEAR_MAX_AGE_MS = 5_000L;
     private static final long DILINK5_INGRESS_MAX_DELAY_MS =
             DILINK5_AUTOMATION_MAX_AGE_MS;
     private final Object diLink5IngressLock = new Object();
@@ -496,6 +498,10 @@ public class BydDataCollector {
             DiLink5DoorSafetySnapshot.unknown();
     private final DiLink5DoorSafetyCache diLink5DoorSafety = new DiLink5DoorSafetyCache();
     private volatile long diLink5DynamicsObservedAtElapsedMs;
+    // daemon: when the producer last read the bridged gear from the gearbox device (Dilink5GearReader)
+    private volatile long diLink5GearObservedAtElapsedMs;
+    // daemon: when the producer last read the bridged speed from the speed device (Dilink5SpeedReader)
+    private volatile long diLink5SpeedObservedAtElapsedMs;
     // Edge-logging latch for the daemon-side cloud cabin fallback (withDiLink5CloudCabinFallback).
     private volatile boolean diLink5CabinCloudFallback;
     private long diLink5TelemetrySourceEpoch;
@@ -586,6 +592,13 @@ public class BydDataCollector {
         Context appContext = context != null && context.getApplicationContext() != null
                 ? context.getApplicationContext() : context;
         boolean freshStart = !collector.diLink5ProducerActive;
+        // DiLink 5 ACC source (BYDAutoPowerDevice power level, ParkCam method). Independent of the
+        // producer's own startup: it must keep reading while the producer is stopped or parked.
+        if (isDiLink5Vehicle()) {
+            com.overdrive.app.byd.dilink5.Dilink5PowerReader.start(appContext);
+        } else {
+            com.overdrive.app.byd.dilink5.Dilink5PowerReader.stop();
+        }
         for (int attempt = 0; attempt < 2; attempt++) {
             if (!isDiLink5Vehicle()) {
                 if (collector.diLink5ProducerActive) collector.stop();
@@ -697,6 +710,40 @@ public class BydDataCollector {
                 .buildPreservingTimestamp();
     }
 
+    /**
+     * As {@link #clearStaleDiLink5DrivingFields(BydVehicleData)}, but a gear read directly from the
+     * gearbox device ({@code keepGear}, valid) survives ACC off. Returns {@code current} itself once
+     * it is already in that state, so a steady parked car does not republish every poll.
+     */
+    static BydVehicleData clearStaleDiLink5DrivingFields(BydVehicleData current, int keepGear) {
+        return clearStaleDiLink5DrivingFields(current, keepGear, Double.NaN);
+    }
+
+    /** As above, also keeping a finite {@code keepSpeedKmh} read from the speed device. */
+    static BydVehicleData clearStaleDiLink5DrivingFields(
+            BydVehicleData current, int keepGear, double keepSpeedKmh) {
+        int gear = isValidGearMode(keepGear) ? keepGear : BydVehicleData.UNAVAILABLE;
+        double speed = Double.isFinite(keepSpeedKmh) ? keepSpeedKmh : Double.NaN;
+        if (gear == BydVehicleData.UNAVAILABLE && Double.isNaN(speed)) {
+            return clearStaleDiLink5DrivingFields(current);
+        }
+        if (current == null
+                || (Double.compare(current.speedKmh, speed) == 0
+                    && current.gearMode == gear
+                    && current.accelPercent == BydVehicleData.UNAVAILABLE
+                    && current.brakePercent == BydVehicleData.UNAVAILABLE
+                    && Double.isNaN(current.steeringAngleDegrees))) {
+            return current;
+        }
+        return current.toBuilder()
+                .speedKmh(speed)
+                .gearMode(gear)
+                .accelPercent(BydVehicleData.UNAVAILABLE)
+                .brakePercent(BydVehicleData.UNAVAILABLE)
+                .steeringAngleDegrees(Double.NaN)
+                .buildPreservingTimestamp();
+    }
+
     static boolean isNewerDiLink5Message(
             long currentEpoch, long currentSequence,
             long incomingEpoch, long incomingSequence) {
@@ -789,9 +836,17 @@ public class BydDataCollector {
                         && isDiLink5DynamicObservationFresh(
                                 nowElapsed, dynamicsObservedAtElapsedMs)
                         ? dynamicsObservedAtElapsedMs : 0L;
+        // a gear/speed the producer read from the gearbox/speed device (noteDiLink5GearObservedAt,
+        // noteDiLink5SpeedObservedAt, recorded just before this call) outlives a stale car_service
+        // dynamics rail
+        boolean gearFresh = isDirectObservationFresh(nowElapsed, diLink5GearObservedAtElapsedMs);
+        boolean speedFresh = isDirectObservationFresh(nowElapsed, diLink5SpeedObservedAtElapsedMs);
         BydVehicleData acceptedIncoming = withDiLink5CloudCabinFallback(
                 acceptedDynamicsObservedAt > 0L
-                        ? incoming : clearStaleDiLink5DrivingFields(incoming));
+                        ? incoming
+                        : clearStaleDiLink5DrivingFields(incoming,
+                                gearFresh ? incoming.gearMode : BydVehicleData.UNAVAILABLE,
+                                speedFresh ? incoming.speedKmh : Double.NaN));
         int[] normalizedDoorStates = normalizeDiLink5DoorStates(doorStates);
         DiLink5DoorSafetySnapshot doorSafety = DiLink5DoorSafetySnapshot.fromBridge(
                 doorStates, doorStatesObservedAtElapsedMs, sampleElapsed, nowElapsed);
@@ -1686,15 +1741,52 @@ public class BydDataCollector {
         if (!isDiLink5Vehicle() || isMainAppProcess()) return null;
         synchronized (diLink5IngressLock) {
             BydVehicleData current = snapshot.get();
+            // a gearbox-device read (Dilink5GearReader) carries its own time; otherwise the gear
+            // came with the car_service dynamics
+            long observedAt = Math.max(
+                    diLink5DynamicsObservedAtElapsedMs, diLink5GearObservedAtElapsedMs);
             if (!diLink5BridgeConsumer
-                    || diLink5DynamicsObservedAtElapsedMs <= 0L
+                    || observedAt <= 0L
                     || current == null
                     || !isValidGearMode(current.gearMode)) {
                 return null;
             }
-            return new DiLink5GearObservation(
-                    current.gearMode, diLink5DynamicsObservedAtElapsedMs);
+            return new DiLink5GearObservation(current.gearMode, observedAt);
         }
+    }
+
+    /** Bridge ingress: when the producer last read the snapshot's gear from the gearbox device. */
+    public void noteDiLink5GearObservedAt(long observedAtElapsedMs) {
+        if (observedAtElapsedMs <= 0L || !isDiLink5Vehicle() || isMainAppProcess()) return;
+        synchronized (diLink5IngressLock) {
+            if (observedAtElapsedMs > diLink5GearObservedAtElapsedMs) {
+                diLink5GearObservedAtElapsedMs = observedAtElapsedMs;
+            }
+        }
+    }
+
+    /** Bridge ingress: when the producer last read the snapshot's speed from the speed device. */
+    public void noteDiLink5SpeedObservedAt(long observedAtElapsedMs) {
+        if (observedAtElapsedMs <= 0L || !isDiLink5Vehicle() || isMainAppProcess()) return;
+        synchronized (diLink5IngressLock) {
+            if (observedAtElapsedMs > diLink5SpeedObservedAtElapsedMs) {
+                diLink5SpeedObservedAtElapsedMs = observedAtElapsedMs;
+            }
+        }
+    }
+
+    private static boolean isDirectObservationFresh(long nowElapsedMs, long observedAtElapsedMs) {
+        return observedAtElapsedMs > 0L && observedAtElapsedMs <= nowElapsedMs
+                && nowElapsedMs - observedAtElapsedMs < DILINK5_BRIDGED_GEAR_MAX_AGE_MS;
+    }
+
+    /** Daemon: the producer's speed-device speed while its own read time is fresh, else NaN. */
+    private double bridgedDiLink5SpeedKmh() {
+        if (!isDiLink5BridgeConsumer()) return Double.NaN;
+        BydVehicleData current = snapshot.get();
+        if (current == null || !Double.isFinite(current.speedKmh)) return Double.NaN;
+        return isDirectObservationFresh(SystemClock.elapsedRealtime(), diLink5SpeedObservedAtElapsedMs)
+                ? current.speedKmh : Double.NaN;
     }
 
     /** One DiLink5 speed/pedal reading with the time its source observed it. */
@@ -1722,7 +1814,13 @@ public class BydDataCollector {
         if (!isDiLink5Vehicle() || isMainAppProcess()) return null;
         CarSvcTelemetry.DynamicObservation local =
                 CarSvcTelemetry.INSTANCE.currentHealthyDynamics();
-        if (local == null) return null;
+        if (local == null) {
+            // no car_service dynamics (51.x Tang): the producer's speed-device speed, no pedals
+            double direct = bridgedDiLink5SpeedKmh();
+            if (!Double.isFinite(direct)) return null;
+            return new DiLink5Dynamics(direct, BydVehicleData.UNAVAILABLE,
+                    BydVehicleData.UNAVAILABLE, diLink5SpeedObservedAtElapsedMs);
+        }
         long observedAt = observedAtFromAge(
                 SystemClock.elapsedRealtime(), local.ageMs);
         if (observedAt <= 0L) return null;
@@ -3518,6 +3616,8 @@ public class BydDataCollector {
      */
     public double readCurrentSpeedKmh() {
         if (isDiLink5BridgeConsumer()) {
+            double direct = bridgedDiLink5SpeedKmh();
+            if (Double.isFinite(direct)) return direct;
             BydVehicleData bridge = diLink5DynamicFallback();
             if (bridge != null && Double.isFinite(bridge.speedKmh)) {
                 return bridge.speedKmh;
@@ -3570,8 +3670,17 @@ public class BydDataCollector {
                         recoverDiLink5Listeners("ACC wake", true);
                     }
 
+                    // Gear the ParkCam way (BYDAutoGearboxDevice.getGear() via BydAutoService.apk),
+                    // preferred over car_service's gear, which some 51.x firmware (Tang) never
+                    // delivers. Read whatever accIsOn says: a parked car reports P, and the stale
+                    // clear below keeps it.
+                    int directGear = com.overdrive.app.byd.dilink5.Dilink5GearReader.read(context);
+                    // speed the same way (BYDAutoSpeedDevice); car_service speed stays the fallback
+                    double directSpeed = accIsOn
+                            ? com.overdrive.app.byd.dilink5.Dilink5SpeedReader.read(context)
+                            : Double.NaN;
                     BydVehicleData base = accIsOn
-                            ? current : clearStaleDiLink5DrivingFields(current);
+                            ? current : clearStaleDiLink5DrivingFields(current, directGear);
                     BydVehicleData.Builder next = base.toBuilder();
                     boolean changed = base != current;
 
@@ -3608,8 +3717,13 @@ public class BydDataCollector {
                                         != pollSchedulerGeneration.get()) {
                             return;
                         }
-                        double observedSpeed = Double.isFinite(speedKmh)
-                                ? speedKmh : Double.NaN;
+                        double observedSpeed = Double.isFinite(directSpeed)
+                                ? directSpeed
+                                : Double.isFinite(speedKmh) ? speedKmh : Double.NaN;
+                        if (Double.isFinite(directSpeed)) {
+                            com.overdrive.app.byd.dilink5.Dilink5TelemetryBridge
+                                    .noteSpeedObservation(SystemClock.elapsedRealtime());
+                        }
                         if (Double.compare(observedSpeed, base.speedKmh) != 0) {
                             next.speedKmh(observedSpeed);
                             changed = true;
@@ -3622,7 +3736,8 @@ public class BydDataCollector {
                             next.brakePercent(brake);
                             changed = true;
                         }
-                        if (gear != base.gearMode) {
+                        // the directly read gear, when there is one, is applied below instead
+                        if (!isValidGearMode(directGear) && gear != base.gearMode) {
                             next.gearMode(gear);
                             changed = true;
                         }
@@ -3634,6 +3749,12 @@ public class BydDataCollector {
                             next.steeringAngleDegrees(observedSteering);
                             changed = true;
                         }
+                    }
+                    if (isValidGearMode(directGear)) {
+                        next.gearMode(directGear);
+                        if (directGear != base.gearMode) changed = true;
+                        com.overdrive.app.byd.dilink5.Dilink5TelemetryBridge
+                                .noteGearObservation(SystemClock.elapsedRealtime());
                     }
 
                     int turn = readTurnNow();
@@ -4241,6 +4362,8 @@ public class BydDataCollector {
      * the cluster's real raw-speed unit and must not scale an automation threshold by 1.6x. */
     public double readSpeedNowKmh() {
         if (isDiLink5BridgeConsumer()) {
+            double direct = bridgedDiLink5SpeedKmh();
+            if (Double.isFinite(direct)) return direct;
             BydVehicleData bridge = diLink5DynamicFallback();
             if (bridge != null && Double.isFinite(bridge.speedKmh)) {
                 return bridge.speedKmh;
@@ -4369,6 +4492,13 @@ public class BydDataCollector {
      *  fast-dynamics poll already call — NOT the learningEPB() listener path. */
     public int readGearNow() {
         if (isDiLink5BridgeConsumer()) {
+            // the producer's gearbox-device gear, fresh by its own read time even while the
+            // car_service dynamics rail (and so the fallback below) is stale
+            DiLink5GearObservation observed = readDiLink5GearObservation();
+            if (observed != null) {
+                long age = SystemClock.elapsedRealtime() - observed.observedAtElapsedMs;
+                if (age >= 0L && age < DILINK5_BRIDGED_GEAR_MAX_AGE_MS) return observed.gear;
+            }
             BydVehicleData bridge = diLink5DynamicFallback();
             int bridged = bridge != null
                     ? selectDiLink5ChargingGear(
@@ -4377,6 +4507,11 @@ public class BydDataCollector {
             if (bridged != BydVehicleData.UNAVAILABLE) return bridged;
         }
         if (isDiLink5Vehicle()) {
+            // ParkCam method first (app process only; uid 2000 is rejected by the device)
+            if (isMainAppProcess()) {
+                int direct = com.overdrive.app.byd.dilink5.Dilink5GearReader.read(context);
+                if (isValidGearMode(direct)) return direct;
+            }
             int carSvc = CarSvcTelemetry.INSTANCE.currentGearValue();
             if (carSvc >= 1 && carSvc <= 6) return carSvc;
             BydVehicleData fallback = diLink5DynamicFallback();

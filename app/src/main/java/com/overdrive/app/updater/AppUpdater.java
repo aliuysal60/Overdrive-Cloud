@@ -268,6 +268,12 @@ public class AppUpdater {
     private String remoteVersion;
     private String remoteUpdatedAt;
     /**
+     * SHA-256 the release server published for the pending APK
+     * ({@link CloudReleases}); null for GitHub-resolved installs, which carry
+     * no digest. Checked after the download, before anything is stopped.
+     */
+    private String expectedSha256;
+    /**
      * Channel the pending install BELONGS to, captured at the SEED point
      * (checkForUpdate = the resolved channel; prepareInstall = alpha, since the
      * catalog only surfaces alpha tags). downloadAndInstall keys its
@@ -800,6 +806,64 @@ public class AppUpdater {
     }
 
     /**
+     * True when the channel is the upstream alpha "pick any version" archive.
+     * With {@link CloudReleases#ENABLED} there is no catalog: every channel
+     * gets the single newest build from the release server.
+     */
+    public static boolean isCatalogChannel(String channel) {
+        return CHANNEL_ALPHA.equals(channel) && !CloudReleases.ENABLED;
+    }
+
+    /**
+     * Release-server check: offer the newest published build when its
+     * versionCode is above the running one. versionCode (not a timestamp
+     * baseline) decides, so a re-check after a failed install offers it again
+     * and a sideloaded newer build is never offered an older one. Seeds the
+     * same fields as the GitHub paths so {@link #downloadAndInstall} runs
+     * unchanged, plus {@link #expectedSha256}.
+     */
+    private void checkCloudRelease(String channel, UpdateCallback callback) {
+        executor.execute(() -> {
+            try {
+                Request request = new Request.Builder()
+                        .url(CloudReleases.LATEST_URL)
+                        .header("Accept", "application/json")
+                        .build();
+                try (Response response = buildClient(15, 15).newCall(request).execute()) {
+                    String currentVersion = getDisplayVersion(context);
+                    if (response.code() == 404) {
+                        // nothing published yet
+                        runCallback(() -> callback.onNoUpdate(currentVersion));
+                        return;
+                    }
+                    if (!response.isSuccessful()) {
+                        postError(callback, "Release server error: HTTP " + response.code());
+                        return;
+                    }
+                    CloudReleases.Release release = CloudReleases.parse(response.body().string());
+                    latestDownloadUrl = release.downloadUrl;
+                    latestApkSizeBytes = release.size;
+                    expectedSha256 = release.sha256;
+                    releaseNotes = release.notes;
+                    remoteUpdatedAt = release.publishedAt;
+                    remoteVersion = release.label(channel);
+                    pendingChannel = channel;
+                    Log.i(TAG, "Release server: latest " + release.versionName + " (" + release.versionCode
+                            + "), running " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")");
+                    if (release.isNewerThan(BuildConfig.VERSION_CODE)) {
+                        runCallback(() -> callback.onUpdateAvailable(currentVersion, remoteVersion, releaseNotes));
+                    } else {
+                        runCallback(() -> callback.onNoUpdate(currentVersion));
+                    }
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Release server check failed: " + e.getMessage());
+                postError(callback, e.getMessage());
+            }
+        });
+    }
+
+    /**
      * Check GitHub Releases for a newer APK on the resolved channel.
      *
      * BRAVEHEART (and any future single-tag rolling channel): the historical
@@ -818,10 +882,14 @@ public class AppUpdater {
             runCallback(() -> callback.onNoUpdate(getDisplayVersion(context)));
             return;
         }
+        if (CloudReleases.ENABLED) {
+            checkCloudRelease(channel, callback);
+            return;
+        }
         // Alpha is browse-and-pick — no passive "an update is available".
         // Run the (one-time) baseline migration off the caller's thread so a
         // main-thread invoker never eats the SharedPreferences commit / shell.
-        if (CHANNEL_ALPHA.equals(channel)) {
+        if (isCatalogChannel(channel)) {
             executor.execute(() -> {
                 migrateBaseline(channel);
                 runCallback(() -> callback.onNoUpdate(getDisplayVersion(context)));
@@ -1208,6 +1276,40 @@ public class AppUpdater {
                     });
                     postInstallError(callback, "Invalid APK (size: " + fileSize + ")");
                     return;
+                }
+
+                // Release-server builds carry a SHA-256: a truncated or
+                // tampered download is refused before any daemon is stopped.
+                if (expectedSha256 != null) {
+                    postProgress(callback, "Verifying download...");
+                    final boolean[] shaDone = {false};
+                    final String[] shaResult = {null};
+                    runShellLong("sha256sum " + APK_PATH + " 2>&1", 120_000L,
+                            new com.overdrive.app.launcher.AdbDaemonLauncher.LaunchCallback() {
+                        @Override public void onLog(String message) {
+                            if (shaResult[0] == null) shaResult[0] = message;
+                        }
+                        @Override public void onLaunched() {
+                            shaDone[0] = true;
+                            synchronized (shaDone) { shaDone.notify(); }
+                        }
+                        @Override public void onError(String error) {
+                            shaResult[0] = "ERROR: " + error;
+                            shaDone[0] = true;
+                            synchronized (shaDone) { shaDone.notify(); }
+                        }
+                    });
+                    awaitFlag(shaDone, 130_000L);
+                    if (!CloudReleases.digestMatches(shaResult[0], expectedSha256)) {
+                        runShell("rm -f " + APK_PATH, new com.overdrive.app.launcher.AdbDaemonLauncher.LaunchCallback() {
+                            @Override public void onLog(String m) {}
+                            @Override public void onLaunched() {}
+                            @Override public void onError(String e) {}
+                        });
+                        Log.e(TAG, "APK digest mismatch: " + shaResult[0]);
+                        postInstallError(callback, "Downloaded APK failed the SHA-256 check, try again");
+                        return;
+                    }
                 }
 
                 // OTA is intentionally force-forward: do not gate installation
@@ -2181,6 +2283,8 @@ public class AppUpdater {
         script.append("killall -9 tailscaled 2>/dev/null\n");
         script.append(psAwkKillLine("wgproxy"));
         script.append("killall -9 wgproxy 2>/dev/null\n");
+        script.append(psAwkKillLine(".frp/run.sh"));
+        script.append(psAwkKillLine("odfrpc"));
         script.append("rm -f /data/local/tmp/start_cam_daemon.sh "
                 + com.overdrive.app.util.ScratchRoot.path("cam_watchdog.pid") + " 2>/dev/null\n");
         script.append("rm -rf /data/local/tmp/cam_watchdog.lock 2>/dev/null\n");
@@ -2551,7 +2655,7 @@ public class AppUpdater {
         // (cloudflared, zrok, sing-box, tailscaled, wgproxy).
         String[] daemons = {"sentry_daemon",
                 "telegram_bot_daemon", "sentry_proxy", "cloudflared", "zrok", "sing-box",
-                "tailscaled", "wgproxy"};
+                "tailscaled", "wgproxy", ".frp/run.sh", "odfrpc"};
         
         for (String daemon : daemons) {
             final boolean[] done = {false};
@@ -2634,6 +2738,8 @@ public class AppUpdater {
                 "killall -9 tailscaled 2>/dev/null\n" +
                 psAwkKillLine("wgproxy") +
                 "killall -9 wgproxy 2>/dev/null\n" +
+                psAwkKillLine(".frp/run.sh") +
+                psAwkKillLine("odfrpc") +
                 "killall -9 sing-box 2>/dev/null\n" +
                 "sleep 1\n" +
                 "rm -rf /data/local/tmp/cam_watchdog.lock /data/local/tmp/acc_sentry_watchdog.lock 2>/dev/null\n" +
@@ -3535,6 +3641,7 @@ public class AppUpdater {
                 throw new java.io.IOException("No APK in release " + tag);
             }
             releaseNotes = release.optString("body", "");
+            expectedSha256 = null;
             latestDownloadUrl = apk[0];
             latestApkSizeBytes = Long.parseLong(apk[3]);
             remoteUpdatedAt = apk[2];

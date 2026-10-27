@@ -27,6 +27,7 @@ public final class DaemonLogPaths {
         PATHS.put("zrok",       com.overdrive.app.util.ScratchRoot.path("zrok.log"));
         PATHS.put("tailscale",  com.overdrive.app.util.ScratchRoot.path(".tailscale/tailscale.log"));
         PATHS.put("wireguard",  com.overdrive.app.wireguard.WireGuardPaths.LOG);
+        PATHS.put("frp",        com.overdrive.app.frp.FrpPaths.LOG);
         PATHS.put("singbox",    com.overdrive.app.util.ScratchRoot.path("singbox.log"));
     }
 

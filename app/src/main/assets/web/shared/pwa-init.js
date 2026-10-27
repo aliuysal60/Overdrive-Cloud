@@ -15,6 +15,18 @@
     if (typeof navigator === 'undefined') return;
     if (!('serviceWorker' in navigator)) return;
 
+    // OverDrive Cloud: many cars share the gateway's origin, so this car's service worker (scope
+    // "/") would cache one car's files for the next; push goes through the gateway instead. Drop
+    // any registration an earlier visit left (the gateway's own worker lives under /gw/).
+    if (/(?:^|;\s*)od_gw=1(?:;|$)/.test(document.cookie)) {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+            regs.forEach(function (reg) {
+                if (!/\/gw\/$/.test(new URL(reg.scope).pathname)) reg.unregister();
+            });
+        }).catch(function () {});
+        return;
+    }
+
     // Dev escape hatch: ?devPwa=1 in the URL forces SW + subscribe to run on
     // localhost. Used by dev/preview-server.py — Chrome treats localhost as
     // a secure context, so the whole flow can be exercised without a real

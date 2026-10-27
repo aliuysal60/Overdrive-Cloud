@@ -41,6 +41,7 @@ enum class DaemonType(
     ZROK_TUNNEL("Zrok Tunnel", "zrok", com.overdrive.app.util.ScratchRoot.path("zrok.disabled")),
     TAILSCALE_TUNNEL("Tailscale Tunnel", "tailscaled", com.overdrive.app.util.ScratchRoot.path("tailscale.disabled")),
     WIREGUARD_TUNNEL("WireGuard Tunnel", "wgproxy", com.overdrive.app.util.ScratchRoot.path("wireguard.disabled")),
+    FRP_TUNNEL("FRP Tunnel", com.overdrive.app.frp.FrpPaths.PROCESS_NAME, com.overdrive.app.util.ScratchRoot.path("frp.disabled")),
     TELEGRAM_DAEMON("Telegram Bot", "telegram_bot_daemon", com.overdrive.app.util.ScratchRoot.path("telegram_bot_daemon.disabled"))
 }
 
@@ -115,5 +116,6 @@ fun DaemonType.localizedName(context: Context): String = context.getString(when 
     DaemonType.ZROK_TUNNEL        -> R.string.daemon_name_zrok
     DaemonType.TAILSCALE_TUNNEL   -> R.string.daemon_name_tailscale
     DaemonType.WIREGUARD_TUNNEL   -> R.string.daemon_name_wireguard
+    DaemonType.FRP_TUNNEL         -> R.string.daemon_name_frp
     DaemonType.TELEGRAM_DAEMON    -> R.string.daemon_name_telegram
 })

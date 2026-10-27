@@ -284,6 +284,8 @@ public class HttpServer {
 
         // A WireGuard config is at most 16 KB; leave room for the JSON wrapper.
         if (requestLine.startsWith("POST /api/wireguard/")) return 64 * 1024;
+        // FRP tunnel settings are four short fields.
+        if (requestLine.startsWith("POST /api/frp/")) return 8 * 1024;
 
         // A widget file is at most 16 KB too; matched on the target after the method, any method.
         final int target = requestLine.indexOf(' ') + 1;
@@ -454,6 +456,8 @@ public class HttpServer {
             // before forwarding, and stashes the original public hostname in
             // X-Forwarded-Host. Captured here so isPwaOrigin can match it.
             String forwardedHostHeader = null;
+            // OverDrive Cloud: the gateway's signed "this account may use this car" header
+            String gatewayAssertionHeader = null;
 
             while ((line = reader.readLine()) != null && !line.isEmpty()) {
                 String lower = line.toLowerCase();
@@ -473,6 +477,8 @@ public class HttpServer {
                     cookieHeader = line.substring(7).trim();
                 } else if (lower.startsWith("authorization:")) {
                     authHeader = line.substring(14).trim();
+                } else if (lower.startsWith("x-od-gateway-assertion:")) {
+                    gatewayAssertionHeader = line.substring(23).trim();
                 } else if (lower.startsWith("accept-language:")) {
                     // First-touch locale hint. Only used if the user has never
                     // explicitly chosen via the picker (LocaleManager file empty).
@@ -582,6 +588,14 @@ public class HttpServer {
                 client.setSoTimeout(60000);
             }
             
+            // OverDrive Cloud: an account linked to this car, vouched for by the gateway (signed with
+            // the key pinned at enrollment). Accepted only when the request came through the local
+            // frpc — loopback AND tunnel headers — so a LAN client cannot replay one directly. Never
+            // grants shell: canGrantShellAccess() refuses every tunnel-relayed caller.
+            boolean gatewayAuthenticated = gatewayAssertionHeader != null && hasTunnelHeaders
+                    && client.getInetAddress().isLoopbackAddress()
+                    && com.overdrive.app.auth.GatewayAssertion.verifyForThisCar(gatewayAssertionHeader) != null;
+
             // WebSocket upgrades (check auth first). /ws is the H.264 stream;
             // /ws/communicate is the inbound PCM push-to-talk stream. Query
             // tokens are supported because browser WebSocket clients cannot set
@@ -616,12 +630,13 @@ public class HttpServer {
                         }
                     }
                 }
-                boolean wsAuthenticated = wsPathOnly.equals(RemoteDevViewWebSocketStream.PATH)
+                boolean wsAuthenticated = gatewayAuthenticated
+                    || (wsPathOnly.equals(RemoteDevViewWebSocketStream.PATH)
                         || GenAiRequestSecurity.isGenAiPath(wsPathOnly)
                     ? AuthMiddleware.checkJwtOnly(
                         wsPathOnly, cookieHeader, wsAuthHeader, out)
                     : AuthMiddleware.checkAuth(wsPathOnly, cookieHeader, wsAuthHeader, out,
-                        client.getRemoteSocketAddress(), hasTunnelHeaders);
+                        client.getRemoteSocketAddress(), hasTunnelHeaders));
                 if (!wsAuthenticated) {
                     client.close();
                     return;
@@ -729,6 +744,8 @@ public class HttpServer {
                     || pathOnly.equals("/wireguard.html")
                     || pathOnly.equals("/api/wireguard")
                     || pathOnly.startsWith("/api/wireguard/");
+            // The FRP settings hold the frps token: same rule.
+            boolean frpRequest = pathOnly.equals("/api/frp") || pathOnly.startsWith("/api/frp/");
             boolean remoteAccessRequest = pathOnly.equals("/remote-access")
                     || pathOnly.equals("/remote-access.html")
                     || pathOnly.startsWith("/api/remote-access/");
@@ -742,11 +759,13 @@ public class HttpServer {
             // the glassWidgets settings, like the built-ins: the car's own arrange mode writes those over loopback.
             boolean widgetWriteRequest = !method.equals("GET")
                     && (isCustomWidgetsPath(pathOnly) || isCommunityWidgetsPath(pathOnly));
-            boolean authenticated = remoteDevRequest || genAiRequest || wireGuardRequest || remoteAccessRequest
+            boolean authenticated = gatewayAuthenticated
+                || (remoteDevRequest || genAiRequest || wireGuardRequest || frpRequest
+                    || remoteAccessRequest
                     || widgetWriteRequest
                 ? AuthMiddleware.checkJwtOnly(path, cookieHeader, authHeader, out)
                 : AuthMiddleware.checkAuth(path, cookieHeader, authHeader, out,
-                    client.getRemoteSocketAddress(), hasTunnelHeaders);
+                    client.getRemoteSocketAddress(), hasTunnelHeaders));
             if (!authenticated) {
                 client.close();
                 return;
@@ -1278,6 +1297,11 @@ public class HttpServer {
         if (path.equals("/api/wireguard") || path.startsWith("/api/wireguard/")
                 || path.startsWith("/api/wireguard?")) {
             return WireGuardApiHandler.handle(method, path, body, out);
+        }
+
+        // Self-hosted FRP tunnel settings (JWT only, see the auth check above)
+        if (path.equals("/api/frp") || path.startsWith("/api/frp/") || path.startsWith("/api/frp?")) {
+            return FrpApiHandler.handle(method, path, body, out);
         }
 
         // Automations API — plus the reusable Action Groups CRUD, which

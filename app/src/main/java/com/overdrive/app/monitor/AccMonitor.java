@@ -671,6 +671,7 @@ public class AccMonitor {
                     getSystemProperty("sys.byd.power_mode", ""));
             DiLink5AccObservation observation = resolveDiLink5AccObservation(
                     classifyAccAnim(getSystemProperty("sys.accanim.status", "")),
+                    com.overdrive.app.power.Dilink5PowerLevelHint.readFreshLevel(),
                     power == DILINK5_POWER_MODE_STARTUP,
                     power == DILINK5_POWER_MODE_IVI_AWAKE,
                     power == DILINK5_POWER_MODE_OFF,
@@ -728,9 +729,13 @@ public class AccMonitor {
             String accAnimRaw =
                     getSystemProperty("sys.accanim.status", "");
             int accAnim = classifyAccAnim(accAnimRaw);
+            // BYDAutoPowerDevice level read by the app process (ParkCam method), fresh or UNKNOWN
+            int powerLevel =
+                    com.overdrive.app.power.Dilink5PowerLevelHint.readFreshLevel();
             String diagnostics = "accanim=" + compactDiagnostic(accAnimRaw)
                     + ", sysPower=" + compactDiagnostic(systemPowerRaw)
-                    + ", dumpPower=" + compactDiagnostic(dumpPowerRaw);
+                    + ", dumpPower=" + compactDiagnostic(dumpPowerRaw)
+                    + ", powerLevel=" + (powerLevel < 0 ? "<none>" : String.valueOf(powerLevel));
 
             boolean startupOn =
                     systemPowerKind == DILINK5_POWER_MODE_STARTUP
@@ -745,6 +750,7 @@ public class AccMonitor {
             return rememberDiLink5Observation(
                     resolveDiLink5AccObservation(
                             accAnim,
+                            powerLevel,
                             startupOn,
                             iviAwake,
                             powerOff,
@@ -760,6 +766,25 @@ public class AccMonitor {
 
     static DiLink5AccObservation resolveDiLink5AccObservation(
             int accAnim,
+            boolean startupOn,
+            boolean iviAwake,
+            boolean powerOff,
+            String diagnostics) {
+        return resolveDiLink5AccObservation(
+                accAnim, com.overdrive.app.power.Dilink5PowerLevelHint.UNKNOWN,
+                startupOn, iviAwake, powerOff, diagnostics);
+    }
+
+    /**
+     * {@code powerLevel} is the app process's fresh {@code BYDAutoPowerDevice.getPowerLevel()}
+     * (2 = ON, 0 = OFF, other = transition, negative = none). It ranks right after
+     * {@code sys.accanim.status}: on 51.x firmware (Tang) accanim and the power-mode rows are empty
+     * or only say "IVI awake", and the power level is the field-verified ignition signal there. An OFF
+     * level does not override a simultaneous StartUp mode, like an OFF accanim.
+     */
+    static DiLink5AccObservation resolveDiLink5AccObservation(
+            int accAnim,
+            int powerLevel,
             boolean startupOn,
             boolean iviAwake,
             boolean powerOff,
@@ -787,6 +812,19 @@ public class AccMonitor {
                     false,
                     "sys.accanim.status",
                     detail);
+        }
+
+        if (powerLevel == 2) {
+            return DiLink5AccObservation.strong(
+                    true, "BYDAutoPowerDevice powerLevel", detail);
+        }
+        if (powerLevel == 0) {
+            if (startupOn) {
+                return DiLink5AccObservation.unknown(
+                        "ignition-source conflict", detail);
+            }
+            return DiLink5AccObservation.strong(
+                    false, "BYDAutoPowerDevice powerLevel", detail);
         }
 
         // Conflicting lifecycle rows are not an ignition edge. Preserve the

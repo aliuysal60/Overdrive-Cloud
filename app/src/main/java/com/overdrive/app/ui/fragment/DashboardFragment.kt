@@ -403,7 +403,8 @@ class DashboardFragment : Fragment() {
         }
 
         // Tunnel URL → tile state + chip refresh.
-        val rebuild = Observer<String?> { _ ->
+        // Any? so the same observer serves the URL LiveData and the cloud pairing
+        val rebuild = Observer<Any?> { _ ->
             rebuildTunnelChips()
             updateTunnelTile()
             refreshHeroChips()
@@ -411,6 +412,8 @@ class DashboardFragment : Fragment() {
         daemonsViewModel.cloudflaredController.tunnelUrl.observe(viewLifecycleOwner, rebuild)
         daemonsViewModel.zrokController.tunnelUrl.observe(viewLifecycleOwner, rebuild)
         daemonsViewModel.tailscaleController.tunnelUrl.observe(viewLifecycleOwner, rebuild)
+        daemonsViewModel.frpController.tunnelUrl.observe(viewLifecycleOwner, rebuild)
+        daemonsViewModel.frpController.cloudPairing.observe(viewLifecycleOwner, rebuild)
 
         // Recording state → live "● <count>" prefix on the recordings tile.
         // The numeric count itself comes from refreshMetricsTiles() below; this
@@ -1095,9 +1098,11 @@ class DashboardFragment : Fragment() {
             daemonsViewModel.zrokController.tunnelUrl.value,
             daemonsViewModel.cloudflaredController.tunnelUrl.value,
             daemonsViewModel.tailscaleController.tunnelUrl.value,
+            daemonsViewModel.frpController.tunnelUrl.value,
             states?.get(DaemonType.ZROK_TUNNEL)?.status,
             states?.get(DaemonType.CLOUDFLARED_TUNNEL)?.status,
             states?.get(DaemonType.TAILSCALE_TUNNEL)?.status,
+            states?.get(DaemonType.FRP_TUNNEL)?.status,
         )
 
         when (display.kind) {
@@ -1108,6 +1113,7 @@ class DashboardFragment : Fragment() {
             com.overdrive.app.ui.model.TunnelDisplayPolicy.Kind.STARTING_ZROK,
             com.overdrive.app.ui.model.TunnelDisplayPolicy.Kind.STARTING_CLOUDFLARED,
             com.overdrive.app.ui.model.TunnelDisplayPolicy.Kind.STARTING_TAILSCALE,
+            com.overdrive.app.ui.model.TunnelDisplayPolicy.Kind.STARTING_FRP,
             com.overdrive.app.ui.model.TunnelDisplayPolicy.Kind.WAITING_FOR_URL -> {
                 metricTunnelValue.text = getString(R.string.dashboard_tunnel_connecting)
                 // Amber, matching the toolbar pill for these states.
@@ -1167,7 +1173,7 @@ class DashboardFragment : Fragment() {
                 val type = chip.tag as? DaemonType ?: return@setOnCheckedStateChangeListener
                 if (type != selectedTunnel) {
                     selectedTunnel = type
-                    renderQr(urlFor(type))
+                    renderQr(qrUrlFor(type))
                 }
             }
         }
@@ -1178,12 +1184,18 @@ class DashboardFragment : Fragment() {
         }
 
         chipGroupTunnels.visibility = if (available.size > 1) View.VISIBLE else View.GONE
-        renderQr(urlFor(newSelection))
+        renderQr(qrUrlFor(newSelection))
     }
 
     private fun collectAvailableTunnels(): List<Pair<DaemonType, String>> {
         val list = mutableListOf<Pair<DaemonType, String>>()
         val states = daemonsViewModel.daemonStates.value
+        daemonsViewModel.frpController.tunnelUrl.value
+            ?.takeIf {
+                com.overdrive.app.ui.model.TunnelDisplayPolicy.isActiveUrl(
+                    it, states?.get(DaemonType.FRP_TUNNEL)?.status)
+            }
+            ?.let { list.add(DaemonType.FRP_TUNNEL to it) }
         daemonsViewModel.cloudflaredController.tunnelUrl.value
             ?.takeIf {
                 com.overdrive.app.ui.model.TunnelDisplayPolicy.isActiveUrl(
@@ -1209,13 +1221,23 @@ class DashboardFragment : Fragment() {
         DaemonType.CLOUDFLARED_TUNNEL -> daemonsViewModel.cloudflaredController.tunnelUrl.value
         DaemonType.ZROK_TUNNEL -> daemonsViewModel.zrokController.tunnelUrl.value
         DaemonType.TAILSCALE_TUNNEL -> daemonsViewModel.tailscaleController.tunnelUrl.value
+        DaemonType.FRP_TUNNEL -> daemonsViewModel.frpController.tunnelUrl.value
         else -> null
     }
+
+    /**
+     * What the QR encodes: the tunnel URL — except for OverDrive Cloud, where the phone should land
+     * on the pairing link (the gateway URL alone does not say which car to add).
+     */
+    private fun qrUrlFor(type: DaemonType): String? =
+        if (type == DaemonType.FRP_TUNNEL) daemonsViewModel.frpController.cloudPairing.value?.url ?: urlFor(type)
+        else urlFor(type)
 
     private fun labelFor(type: DaemonType): String = when (type) {
         DaemonType.CLOUDFLARED_TUNNEL -> getString(R.string.tunnel_label_cloudflared)
         DaemonType.ZROK_TUNNEL -> getString(R.string.tunnel_label_zrok)
         DaemonType.TAILSCALE_TUNNEL -> getString(R.string.tunnel_label_tailscale)
+        DaemonType.FRP_TUNNEL -> getString(R.string.tunnel_label_frp)
         else -> type.localizedName(requireContext())
     }
 
@@ -1241,7 +1263,9 @@ class DashboardFragment : Fragment() {
                 qrContainer.visibility = View.VISIBLE
                 ivQrCode.visibility = View.VISIBLE
                 tvQrPlaceholder.visibility = View.GONE
-                tvUrl.text = url
+                // cloud pairing: show the code to type under the QR instead of the long link
+                val pairing = daemonsViewModel.frpController.cloudPairing.value?.takeIf { it.url == url }
+                tvUrl.text = pairing?.code ?: url
                 tvUrl.visibility = View.VISIBLE
                 lastRenderedQrUrl = url
                 hasRenderedQrForView = true
@@ -1275,7 +1299,7 @@ class DashboardFragment : Fragment() {
             }
         )
         if (expanded) {
-            renderQr(selectedTunnel?.let(::urlFor))
+            renderQr(selectedTunnel?.let(::qrUrlFor))
         }
     }
 
@@ -1284,13 +1308,16 @@ class DashboardFragment : Fragment() {
         val cfState = states[DaemonType.CLOUDFLARED_TUNNEL]
         val zrokState = states[DaemonType.ZROK_TUNNEL]
         val tailscaleState = states[DaemonType.TAILSCALE_TUNNEL]
+        val frpState = states[DaemonType.FRP_TUNNEL]
         return when {
+            frpState?.status == DaemonStatus.STARTING -> getString(R.string.dashboard_starting_frp)
             zrokState?.status == DaemonStatus.STARTING -> getString(R.string.dashboard_starting_zrok)
             cfState?.status == DaemonStatus.STARTING -> getString(R.string.dashboard_starting_cloudflared)
             tailscaleState?.status == DaemonStatus.STARTING -> getString(R.string.dashboard_starting_tailscale)
             zrokState?.status == DaemonStatus.RUNNING -> getString(R.string.dashboard_waiting_url)
             cfState?.status == DaemonStatus.RUNNING -> getString(R.string.dashboard_waiting_url)
             tailscaleState?.status == DaemonStatus.RUNNING -> getString(R.string.dashboard_waiting_url)
+            frpState?.status == DaemonStatus.RUNNING -> getString(R.string.dashboard_waiting_url)
             else -> getString(R.string.dashboard_no_tunnel)
         }
     }

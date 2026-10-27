@@ -52,6 +52,11 @@ public final class Dilink5TelemetryBridge {
                 return thread;
             });
 
+    // when the producer last read a valid gear from the gearbox device (Dilink5GearReader); the
+    // gear then stays fresh on the daemon even while the car_service dynamics rail is down
+    private static final AtomicLong gearObservedAtElapsedMs = new AtomicLong();
+    // same for speed read from the speed device (Dilink5SpeedReader)
+    private static final AtomicLong speedObservedAtElapsedMs = new AtomicLong();
     private static volatile boolean active;
     private static volatile Socket socket;
     private static BufferedReader input;
@@ -128,6 +133,15 @@ public final class Dilink5TelemetryBridge {
                         "dynamicsObservedElapsedMs",
                         dynamicsObservedAtElapsedMs);
             }
+            // Additive (protocol stays 1; an older daemon ignores the key).
+            long gearObservedAt = gearObservedAtElapsedMs.get();
+            if (gearObservedAt > 0L) {
+                request.put("gearObservedElapsedMs", gearObservedAt);
+            }
+            long speedObservedAt = speedObservedAtElapsedMs.get();
+            if (speedObservedAt > 0L) {
+                request.put("speedObservedElapsedMs", speedObservedAt);
+            }
             request.put("charging", charging);
             if (energyFeedback >= 0 && energyFeedback <= 2) {
                 request.put("energyFeedback", energyFeedback);
@@ -160,6 +174,16 @@ public final class Dilink5TelemetryBridge {
         } catch (Exception e) {
             logger.debug("Telemetry encode failed: " + e.getMessage());
         }
+    }
+
+    /** The producer read the snapshot's gear from the gearbox device at {@code elapsedMs}. */
+    public static void noteGearObservation(long elapsedMs) {
+        if (elapsedMs > 0L) gearObservedAtElapsedMs.set(elapsedMs);
+    }
+
+    /** The producer read the snapshot's speed from the speed device at {@code elapsedMs}. */
+    public static void noteSpeedObservation(long elapsedMs) {
+        if (elapsedMs > 0L) speedObservedAtElapsedMs.set(elapsedMs);
     }
 
     static String sanitizeLockDiag(String lockDiag) {

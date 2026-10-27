@@ -935,6 +935,9 @@
     <string name="diagnostics_camera_value_camera_n_manual">Kamera %1$d (manuel)</string>
     <string name="diagnostics_camera_value_probing">Kontrol ediliyor…</string>
     <string name="diagnostics_camera_value_offline">Çevrimdışı</string>
+    <string name="diagnostics_camera_value_dilink5">DiLink 5 · 4 kamera (%1$s)</string>
+    <string name="diagnostics_camera_dilink5_mapping_auto">otomatik</string>
+    <string name="diagnostics_camera_value_dilink5_no_hardware">DiLink 5 · kamera kütüphanesi yok</string>
     <!-- Battery tile primary value: %1$.0f is the SOH percent (0..100). -->
     <string name="diagnostics_battery_value_soh">%1$.0f%%</string>
     <string name="diagnostics_battery_value_pending">Veri bekleniyor</string>

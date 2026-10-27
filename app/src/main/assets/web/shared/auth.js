@@ -13,7 +13,19 @@ const BYDAuth = {
     
     // Check if user is authenticated
     isAuthenticated: function() {
-        return !!this.getToken();
+        return this.viaGateway() || !!this.getToken();
+    },
+
+    // OverDrive Cloud: the gateway marks its pages with a readable od_gw cookie and vouches for
+    // the signed-in account on every request, so this car's own login does not apply there.
+    viaGateway: function() {
+        return typeof document !== 'undefined' && /(?:^|;\s*)od_gw=1(?:;|$)/.test(document.cookie);
+    },
+
+    // Where "sign in again" leads: the gateway's car list, or this car's login page
+    loginUrl: function(returnTo) {
+        if (this.viaGateway()) return '/gw/';
+        return '/login.html' + (returnTo ? '?redirect=' + encodeURIComponent(returnTo) : '');
     },
     
     // Get JWT from cookie OR localStorage (fallback)
@@ -94,8 +106,7 @@ const BYDAuth = {
         
         // Handle 401 - redirect to login
         if (response.status === 401) {
-            const currentPath = window.location.pathname + window.location.search;
-            window.location.href = '/login.html?redirect=' + encodeURIComponent(currentPath);
+            window.location.href = this.loginUrl(window.location.pathname + window.location.search);
             throw new Error('Unauthorized');
         }
         
@@ -126,14 +137,13 @@ const BYDAuth = {
             // Ignore errors
         }
         this.clearToken();
-        window.location.href = '/login.html';
+        window.location.href = this.loginUrl();
     },
     
     // Redirect to login if not authenticated
     requireAuth: function() {
         if (!this.isAuthenticated()) {
-            const currentPath = window.location.pathname + window.location.search;
-            window.location.href = '/login.html?redirect=' + encodeURIComponent(currentPath);
+            window.location.href = this.loginUrl(window.location.pathname + window.location.search);
             return false;
         }
         return true;
@@ -166,6 +176,28 @@ const BYDAuth = {
         }
         return originalFetch.call(this, url, options);
     };
+})();
+
+// OverDrive Cloud: a way back to the car list on every page opened through the gateway
+(function() {
+    if (!BYDAuth.viaGateway()) return;
+    function addButton() {
+        if (document.getElementById('od-gw-back')) return;
+        var tr = String(navigator.language || '').toLowerCase().indexOf('tr') === 0;
+        var label = (window.BYD && BYD.i18n && BYD.i18n.t && BYD.i18n.t('cloud.my_cars')) || '';
+        if (!label || label === 'cloud.my_cars') label = tr ? 'Araçlarım' : 'My cars';
+        var a = document.createElement('a');
+        a.id = 'od-gw-back';
+        a.href = '/gw/';
+        a.textContent = '← ' + label;
+        a.setAttribute('style', 'position:fixed;left:12px;bottom:calc(12px + var(--bottom-nav-h, 0px) + env(safe-area-inset-bottom));'
+            + 'z-index:2147483000;padding:8px 14px;border-radius:999px;background:rgba(15,20,18,.88);'
+            + 'color:#4fd1a5;font:600 14px/1.2 system-ui,sans-serif;text-decoration:none;'
+            + 'border:1px solid rgba(79,209,165,.35);box-shadow:0 2px 10px rgba(0,0,0,.35)');
+        document.body.appendChild(a);
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addButton);
+    else addButton();
 })();
 
 // Export for module systems

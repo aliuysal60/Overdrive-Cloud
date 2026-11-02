@@ -95,9 +95,6 @@ class AdbShellExecutor(private val context: Context) {
          *  command read budget.) */
         private const val BULK_HANDSHAKE_TIMEOUT_MS = 10_000
 
-        /** Mode of files staged by [pushBulk]: 0644, readable by `pm install`. */
-        private const val PUSH_FILE_MODE = 420
-
         /**
          * SO_TIMEOUT for the throwaway AUTH PROBE connection (first step of
          * [tryConnectWithTimeout]). While user auth is pending, adbd simply
@@ -499,24 +496,32 @@ class AdbShellExecutor(private val context: Context) {
     }
 
     /**
-     * BULK LANE file transfer: push [localFile] to [remotePath] (mode 0644)
-     * over the ADB sync protocol on a dedicated connection, with the same
-     * deadline and single-delivery guarantees as [executeBulk]. Lets an
-     * app-UID caller stage a file that the shell (uid 2000) can read — the
-     * app UID cannot write /data/local/tmp itself.
+     * BULK LANE streamed install of [apk]: `cmd package install -S <size>
+     * [options]` with the APK streamed over a dedicated ADB connection — what
+     * `adb install` does ("Performing Streamed Install"); it runs as the shell
+     * (uid 2000) and writes nothing to /data/local/tmp. A file push there is
+     * not an option: BYD's user-build adbd refuses it ("remote fchown failed:
+     * Operation not permitted"). Same deadline and single-delivery guarantees
+     * as [executeBulk]: onSuccess("Success"), else onError with pm's answer
+     * ("... Install failed: Failure [INSTALL_FAILED_...]").
      */
-    fun pushBulk(localFile: File, remotePath: String, deadlineMs: Long, callback: ShellCallback) {
+    fun installBulk(apk: File, options: Array<String>, deadlineMs: Long, callback: ShellCallback) {
         val seq = cmdSeq.incrementAndGet()
-        logger.debug(TAG, "adb#$seq SUBMIT-PUSH deadline=${deadlineMs}ms: " +
-            "${localFile.length()}B -> $remotePath")
-        runBulk(seq, "<push:$remotePath>", deadlineMs, callback) { adb ->
-            adb.push(localFile, remotePath, PUSH_FILE_MODE, System.currentTimeMillis())
-            ShellResult(0, "OK")
+        logger.debug(TAG, "adb#$seq SUBMIT-INSTALL deadline=${deadlineMs}ms: " +
+            "${apk.length()}B ${options.joinToString(" ")}")
+        runBulk(seq, "<install:${apk.name}>", deadlineMs, callback) { adb ->
+            if (!adb.supportsFeature("cmd")) {
+                // dadb would fall back to push + pm install, which this adbd refuses.
+                ShellResult(1, "adbd has no 'cmd' feature (no streamed install)")
+            } else {
+                adb.install(apk, *options)   // throws IOException unless pm said Success
+                ShellResult(0, "Success")
+            }
         }
     }
 
     /**
-     * Shared body of [executeBulk] / [pushBulk]: runs [op] on a dedicated
+     * Shared body of [executeBulk] / [installBulk]: runs [op] on a dedicated
      * connection; exit code 0 reports onSuccess, anything else onError.
      */
     private fun runBulk(

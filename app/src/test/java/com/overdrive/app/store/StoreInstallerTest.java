@@ -102,6 +102,46 @@ public class StoreInstallerTest {
     }
 
     @Test
+    public void streamedInstallErrorsCarryTheBracketedReason() {
+        // dadb's install() throws "Install failed: <pm output>"; the bulk lane prefixes it.
+        assertEquals("INSTALL_FAILED_VERSION_DOWNGRADE",
+                StoreInstaller.pmOutcome("Execution failed: Install failed: "
+                        + "Failure [INSTALL_FAILED_VERSION_DOWNGRADE]").message);
+        StoreInstaller.Outcome noCmd = StoreInstaller.pmOutcome(
+                "Exit code 1: adbd has no 'cmd' feature (no streamed install)");
+        assertFalse(noCmd.success);
+        assertTrue(noCmd.message.contains("'cmd' feature"));
+    }
+
+    @Test
+    public void installsStreamOverAdbAndNeverPushToDataLocalTmp() throws IOException {
+        // BYD's user-build adbd refuses file pushes into /data/local/tmp ("remote fchown
+        // failed: Operation not permitted"), so installs must use the streamed path only.
+        String adb = readRepositoryFile(
+                "app/src/main/java/com/overdrive/app/launcher/AdbShellExecutor.kt");
+        String installer = readRepositoryFile(
+                "app/src/main/java/com/overdrive/app/store/StoreInstaller.java");
+        assertFalse(adb.contains(".push("));
+        assertTrue(adb.contains("adb.supportsFeature(\"cmd\")"));
+        assertTrue(adb.contains("adb.install(apk, *options)"));
+        assertTrue(installer.contains("adb().installBulk("));
+        assertTrue(installer.contains("{\"-r\", \"-d\"}"));
+        assertFalse(installer.contains("pushBulk"));
+    }
+
+    private static String readRepositoryFile(String relativePath) throws IOException {
+        java.nio.file.Path current = java.nio.file.Paths.get("").toAbsolutePath();
+        while (current != null) {
+            java.nio.file.Path candidate = current.resolve(relativePath);
+            if (java.nio.file.Files.isRegularFile(candidate)) {
+                return new String(java.nio.file.Files.readAllBytes(candidate), StandardCharsets.UTF_8);
+            }
+            current = current.getParent();
+        }
+        throw new AssertionError("Could not locate repository file: " + relativePath);
+    }
+
+    @Test
     public void pmSilenceOrTransportErrorsAreFailures() {
         assertEquals("pm gave no answer", StoreInstaller.pmOutcome("").message);
         assertEquals("pm gave no answer", StoreInstaller.pmOutcome(null).message);

@@ -10,7 +10,6 @@ import android.util.Log;
 
 import com.overdrive.app.launcher.AdbShellExecutor;
 import com.overdrive.app.updater.AppUpdater;
-import com.overdrive.app.util.ScratchRoot;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -30,10 +29,11 @@ import java.util.regex.Pattern;
 /**
  * Silent install and uninstall for OverDrive Store. The store hands over an APK it has
  * downloaded; this copies it into the app cache while hashing it, checks the hash and the
- * package the APK declares, stages it in the shell scratch root over ADB and runs
- * {@code pm install -r -d} there — the same shell path as OverDrive's own updates, under the
- * same single-install gate ({@link AppUpdater#tryBeginInstall()}), so the two never race
- * the shared staging directory or {@code pm}.
+ * package the APK declares, and streams it to the package manager over ADB
+ * ({@code cmd package install -r -d}, what {@code adb install -r -d} does) as the shell
+ * (uid 2000), like OverDrive's own updates, under the same single-install gate
+ * ({@link AppUpdater#tryBeginInstall()}). Nothing is staged in /data/local/tmp: BYD's adbd
+ * refuses file pushes there.
  *
  * <p>OverDrive itself, the store, the launcher companion and system packages are never
  * installed over or uninstalled from the store's requests; OverDrive installs and updates
@@ -54,10 +54,10 @@ public final class StoreInstaller {
     private static final Pattern SHA256_HEX = Pattern.compile("[0-9a-fA-F]{64}");
     private static final Pattern PM_FAILURE = Pattern.compile("Failure \\[([^\\]]*)\\]");
 
-    private static final String STAGED_APK_NAME = "overdrive_store_install.apk";
-    private static final long PUSH_DEADLINE_MS = 300_000L;
+    // -r replace, -d allow downgrade: the same flags as OverDrive's own update, so the
+    // store can also install an older version of an app the user picked.
+    private static final String[] INSTALL_OPTIONS = {"-r", "-d"};
     private static final long PM_DEADLINE_MS = 300_000L;
-    private static final long CLEANUP_DEADLINE_MS = 30_000L;
     // The executor guarantees a callback by its deadline; the margin only covers delivery.
     private static final long WAIT_MARGIN_MS = 20_000L;
 
@@ -234,26 +234,12 @@ public final class StoreInstaller {
         }
     }
 
+    /** Stream {@code local} to the package manager over ADB (adb install -r -d). */
     private Outcome pmInstall(File local) throws InterruptedException {
-        String remote = ScratchRoot.path(STAGED_APK_NAME);
-        ShellOutcome pushed = await(cb -> adb().pushBulk(local, remote, PUSH_DEADLINE_MS, cb),
-                PUSH_DEADLINE_MS + WAIT_MARGIN_MS);
-        if (!pushed.ok) {
-            removeStaged(remote);
-            return Outcome.fail("could not stage APK (" + pushed.text + ")");
-        }
-        // -r replace, -d allow downgrade: same flags as OverDrive's own update, so the
-        // store can also install an older version of an app the user picked.
-        ShellOutcome installed = await(cb -> adb().executeBulk(
-                        "pm install -r -d " + remote + " 2>&1; rm -f " + remote, PM_DEADLINE_MS, cb),
+        ShellOutcome installed = await(cb -> adb().installBulk(
+                        local, INSTALL_OPTIONS, PM_DEADLINE_MS, cb),
                 PM_DEADLINE_MS + WAIT_MARGIN_MS);
-        if (!installed.ok) removeStaged(remote);
-        return pmOutcome(installed.text);
-    }
-
-    private void removeStaged(String remote) throws InterruptedException {
-        await(cb -> adb().executeBulk("rm -f " + remote, CLEANUP_DEADLINE_MS, cb),
-                CLEANUP_DEADLINE_MS + WAIT_MARGIN_MS);
+        return installed.ok ? Outcome.ok() : pmOutcome(installed.text);
     }
 
     // ---------------------------------------------------------------- uninstall

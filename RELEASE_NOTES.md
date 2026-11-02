@@ -2,6 +2,10 @@
 
 BYD Tang ve Sealion 7 (DiLink 5, 51.1.x) için hazırlanan OverDrive sürümlerinin notları.
 
+## 57.0.7 — 2026-11-02
+
+- Uygulama Mağazası düzeltmesi: mağaza ve mağazadan kurulan uygulamalar artık `adb install` gibi doğrudan paket yöneticisine aktarılarak kuruluyor; 57.0.6'da araç dosya aktarımını reddettiği için kurulum yapılamıyordu
+
 ## 57.0.6 — 2026-11-02
 
 - Uygulama Mağazası: sol menünün en üstünde. İlk basışta OverDrive Mağaza'yı (F-Droid istemcisi) kendiliğinden indirip kurar; F-Droid ve IzzyOnDroid'deki uygulamalar onay ekranı çıkmadan, OverDrive güncellemesi gibi kurulur, güncellenir ve kaldırılır

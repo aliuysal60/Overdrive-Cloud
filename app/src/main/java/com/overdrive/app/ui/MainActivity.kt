@@ -100,6 +100,7 @@ open class MainActivity : AppCompatActivity() {
     private val RAIL_KEY_DASHBOARD = "dashboard"
     private val RAIL_KEY_SETTINGS = "settings"
     private val RAIL_KEY_ABOUT = "about"
+    private val RAIL_KEY_STORE = "store"
     private val KEY_RAIL_EXPANDED = "navigation_rail_expanded"
     // M3 emphasized-decelerate — same curve ZoomableVideoView uses, so the rail
     // shares the app's motion vocabulary instead of a stock Decelerate.
@@ -1756,6 +1757,11 @@ open class MainActivity : AppCompatActivity() {
                 R.drawable.ic_dashboard, R.string.rail_dashboard),
             RailItem(NavigationRailCatalog.ASSISTANT, R.id.railDestAssistant,
                 R.id.genAiFragment, R.drawable.ic_smart_toy, R.string.rail_assistant),
+            // OverDrive Store is another app: opened, or installed first (StoreLauncher).
+            // Fixed row (its key is not in the pin catalog), so it is always shown.
+            RailItem(RAIL_KEY_STORE, R.id.railDestStore, 0,
+                R.drawable.ic_store, R.string.rail_store,
+                onClick = { com.overdrive.app.store.StoreLauncher.openOrInstall(this) }),
             RailItem(NavigationRailCatalog.LIVE, R.id.railDestLive, R.id.liveViewFragment,
                 R.drawable.ic_live, R.string.rail_live),
             RailItem(NavigationRailCatalog.RECORDINGS, R.id.railDestRecordings,
@@ -1860,11 +1866,12 @@ open class MainActivity : AppCompatActivity() {
             row.contentDescription = label
             TooltipCompat.setTooltipText(row, label)
             row.setOnClickListener {
+                val action = item.onClick
                 val activity = item.launchActivity
-                if (activity != null) {
-                    startActivity(Intent(this, activity))
-                } else {
-                    navigateToRailDestination(item.destinationId)
+                when {
+                    action != null -> action()
+                    activity != null -> startActivity(Intent(this, activity))
+                    else -> navigateToRailDestination(item.destinationId)
                 }
             }
         }
@@ -1960,7 +1967,9 @@ open class MainActivity : AppCompatActivity() {
         // instead of navigating to a nav-graph fragment. Such rows have no
         // NavController destination (destinationId == 0) and are skipped by
         // the selection-sync matcher.
-        val launchActivity: Class<*>? = null
+        val launchActivity: Class<*>? = null,
+        // When non-null, the row runs this instead (also destinationId == 0).
+        val onClick: (() -> Unit)? = null
     )
 
     /**

@@ -95,6 +95,9 @@ class AdbShellExecutor(private val context: Context) {
          *  command read budget.) */
         private const val BULK_HANDSHAKE_TIMEOUT_MS = 10_000
 
+        /** Mode of files staged by [pushBulk]: 0644, readable by `pm install`. */
+        private const val PUSH_FILE_MODE = 420
+
         /**
          * SO_TIMEOUT for the throwaway AUTH PROBE connection (first step of
          * [tryConnectWithTimeout]). While user auth is pending, adbd simply
@@ -486,6 +489,43 @@ class AdbShellExecutor(private val context: Context) {
     fun executeBulk(command: String, deadlineMs: Long, callback: ShellCallback) {
         val seq = cmdSeq.incrementAndGet()
         logger.debug(TAG, "adb#$seq SUBMIT-BULK deadline=${deadlineMs}ms: $command")
+        runBulk(seq, "<bulk:${command.take(120)}>", deadlineMs, callback) { adb ->
+            // Same root/TMPDIR exports and path remap as the shared
+            // lane (shellGuarded): the updater's wget/pm install must
+            // stage in the live scratch root, not the legacy one.
+            val result = adb.shell(com.overdrive.app.util.ScratchRoot.prepare(command))
+            ShellResult(result.exitCode, result.allOutput)
+        }
+    }
+
+    /**
+     * BULK LANE file transfer: push [localFile] to [remotePath] (mode 0644)
+     * over the ADB sync protocol on a dedicated connection, with the same
+     * deadline and single-delivery guarantees as [executeBulk]. Lets an
+     * app-UID caller stage a file that the shell (uid 2000) can read — the
+     * app UID cannot write /data/local/tmp itself.
+     */
+    fun pushBulk(localFile: File, remotePath: String, deadlineMs: Long, callback: ShellCallback) {
+        val seq = cmdSeq.incrementAndGet()
+        logger.debug(TAG, "adb#$seq SUBMIT-PUSH deadline=${deadlineMs}ms: " +
+            "${localFile.length()}B -> $remotePath")
+        runBulk(seq, "<push:$remotePath>", deadlineMs, callback) { adb ->
+            adb.push(localFile, remotePath, PUSH_FILE_MODE, System.currentTimeMillis())
+            ShellResult(0, "OK")
+        }
+    }
+
+    /**
+     * Shared body of [executeBulk] / [pushBulk]: runs [op] on a dedicated
+     * connection; exit code 0 reports onSuccess, anything else onError.
+     */
+    private fun runBulk(
+        seq: Int,
+        label: String,
+        deadlineMs: Long,
+        callback: ShellCallback,
+        op: (Dadb) -> ShellResult
+    ) {
         // The deadline anchors at SUBMISSION on the MONOTONIC clock, and the
         // callback is GUARANTEED by deadline+ε: a SETUP watchdog armed right
         // here covers the phases where the task may not even be running yet
@@ -508,7 +548,7 @@ class AdbShellExecutor(private val context: Context) {
                 callback.onError("Execution failed: deadline ${deadlineMs}ms exceeded before start")
             }
         }, deadlineMs, TimeUnit.MILLISECONDS)
-        submit(seq, "<bulk:${command.take(120)}>") {
+        submit(seq, label) {
             fun remainingMs() = (deadlineAtNanos - System.nanoTime()) / 1_000_000L
             val t0 = System.currentTimeMillis()
             var bulk: BulkConnection? = null
@@ -554,19 +594,14 @@ class AdbShellExecutor(private val context: Context) {
                     }
                 }, remaining, TimeUnit.MILLISECONDS)
                 try {
-                    // Same root/TMPDIR exports and path remap as the shared
-                    // lane (shellGuarded): the updater's wget/pm install must
-                    // stage in the live scratch root, not the legacy one.
-                    val result = conn.adb.shell(
-                        com.overdrive.app.util.ScratchRoot.prepare(command)
-                    )
+                    val result = op(conn.adb)
                     if (settled.compareAndSet(false, true)) {
                         cmdWatchdog.cancel(false)
                         logger.debug(TAG, "adb#$seq DONE-BULK total=${System.currentTimeMillis() - t0}ms exit=${result.exitCode}")
                         if (result.exitCode == 0) {
-                            callback.onSuccess(result.allOutput)
+                            callback.onSuccess(result.output)
                         } else {
-                            callback.onError("Exit code ${result.exitCode}: ${result.allOutput}")
+                            callback.onError("Exit code ${result.exitCode}: ${result.output}")
                         }
                     }
                     // else: the command watchdog won while the result was

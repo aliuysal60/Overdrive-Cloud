@@ -1461,6 +1461,10 @@
     <string name="error_unknown">Bilinmeyen hata</string>
     <string name="nav_page_assistant">Asistan</string>
     <string name="rail_assistant">Asistan</string>
+    <string name="rail_store">Uygulama Mağazası</string>
+    <string name="store_installing">OverDrive Mağaza kuruluyor…</string>
+    <string name="store_updating">OverDrive Mağaza güncelleniyor…</string>
+    <string name="store_install_failed">OverDrive Mağaza kurulamadı: %1$s</string>
     <string name="rail_key_mapping">Tuş eşleme</string>
     <string name="rail_seat_positions">Koltuk konumları</string>
     <string name="rail_expand">Gezinme etiketlerini göster</string>

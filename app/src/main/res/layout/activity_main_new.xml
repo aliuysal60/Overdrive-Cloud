@@ -94,6 +94,13 @@
                         layout="@layout/item_rail_destination"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content" />
+                    <!-- OverDrive Store: opens the store app, installing it first if missing
+                         (StoreLauncher). Fixed row, not part of the pin/unpin catalog. -->
+                    <include
+                        android:id="@+id/railDestStore"
+                        layout="@layout/item_rail_destination"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
                     <!-- Category headers group the rows from here down. Each one
                          hides when every row under it is unpinned — see
                          MainActivity.applyNavigationRailVisibility. -->

@@ -246,6 +246,12 @@
     <!-- Overlay permission for floating status indicator (user must grant manually) -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <!-- Held by OverDrive Store to bind StoreInstallService (silent app installs).
+         signature: granted only to apps signed with OverDrive's own key. -->
+    <permission
+        android:name="com.overdrive.app.permission.STORE_INSTALL"
+        android:protectionLevel="signature" />
+
     <application
         android:name="com.overdrive.app.OverdriveApplication"
         android:allowBackup="false"
@@ -735,6 +741,13 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- OverDrive Store (com.overdrive.store) installs/updates/uninstalls apps through
+             OverDrive's ADB shell. Only an app signed with OverDrive's key can bind. -->
+        <service
+            android:name="com.overdrive.app.store.StoreInstallService"
+            android:exported="true"
+            android:permission="com.overdrive.app.permission.STORE_INSTALL" />
 
     </application>
 </manifest>

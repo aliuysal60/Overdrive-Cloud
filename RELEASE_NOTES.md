@@ -2,6 +2,12 @@
 
 BYD Tang ve Sealion 7 (DiLink 5, 51.1.x) için hazırlanan OverDrive sürümlerinin notları.
 
+## 57.0.6 — 2026-11-02
+
+- Uygulama Mağazası: sol menünün en üstünde. İlk basışta OverDrive Mağaza'yı (F-Droid istemcisi) kendiliğinden indirip kurar; F-Droid ve IzzyOnDroid'deki uygulamalar onay ekranı çıkmadan, OverDrive güncellemesi gibi kurulur, güncellenir ve kaldırılır
+- Mağaza ayar gerektirmez: uygulama listesi mobil veride de yenilenir, kurulan APK'lar silinir; güncellemeler bildirimle gelir, kullanıcı tek dokunuşla kurar (isterse otomatik güncellemeyi açabilir)
+- Mağazanın yeni sürümü çıktığında, mağaza açılmadan önce kendiliğinden güncellenir
+
 ## 57.0.5 — 2026-10-27
 
 - Tang / Sealion 7: telefondan ya da ekrandan kilitleme artık çalışıyor. Aracın kabin servisi sürücü kapısı kilidini okuyamadığı için komut hiç gönderilmiyordu; artık kilit durumu car_service'ten okunuyor ve kapının gerçekten kilitlendiği oradan teyit ediliyor. Araç kilitliyken kilit açma komutunu araç kabul etmiyor; uygulama bunu "başarısız" olarak bildirir

@@ -10,6 +10,7 @@
   <a href="#whats-different-in-this-fork">What's different</a> •
   <a href="#quick-start-use-pre-built-apk">Setup Guide</a> •
   <a href="#overdrive-cloud">OverDrive Cloud</a> •
+  <a href="#app-stores">App Stores</a> •
   <a href="#features">Features</a> •
   <a href="#home-assistant-integration">Home Assistant</a>
 </p>
@@ -18,7 +19,7 @@ A fork of [OverDrive](https://github.com/yash-srivastava/Overdrive-release) — 
 
 This build fixes every OverDrive bug seen on these cars, keeps **sentry mode running without the head unit ever going to sleep** while using very little battery, and adds **OverDrive Cloud**: reach your car from your phone anywhere, get its alerts and update the app remotely, with nothing to configure. Recordings stay on the car; the cloud is optional.
 
-> 🇹🇷 **Türkçe:** BYD Tang ve Sealion 7'nin 51.1.x yazılımları için düzeltilmiş OverDrive çatalı. Diğer BYD modellerinde de çalışır. Tüm hatalar düzeltildi; bekçi modu ünite hiç uyumadan, az pil harcayarak çalışır. Kurulum ve sürüm geçmişi: [overdrive.cloud.solucharger.com](https://overdrive.cloud.solucharger.com)
+> 🇹🇷 **Türkçe:** BYD Tang ve Sealion 7'nin 51.1.x yazılımları için düzeltilmiş OverDrive çatalı. Diğer BYD modellerinde de çalışır. Tüm hatalar düzeltildi; bekçi modu ünite hiç uyumadan, az pil harcayarak çalışır. Uygulama içindeki iki mağazayla (F-Droid ve Google Play), aracın yazılımını eski sürüme düşürmeden ve ADB açmadan istediğiniz uygulamayı kurup güncelleyebilirsiniz. Kurulum ve sürüm geçmişi: [overdrive.cloud.solucharger.com](https://overdrive.cloud.solucharger.com)
 
 ---
 
@@ -39,7 +40,8 @@ This build fixes every OverDrive bug seen on these cars, keeps **sentry mode run
 - **Sentry mode that never sleeps** — the head unit stays awake while parked, so sentry mode watches the car 24/7 while using very little battery (see [Parked Keep-Alive](#parked-keep-alive-on-dilink-5-sleep-prevention)).
 - **No ADB needed to install** on the Tang and Sealion 7 — install from a USB drive.
 - **[OverDrive Cloud](#overdrive-cloud)** — the car enrolls itself, you add it to your phone with a QR code and open it from anywhere. Google sign-in, alerts on your phone, family sharing.
-- **Remote updates** — "Update available" shows in the car app, in the car's web interface and on your phone; one tap downloads, verifies (SHA-256) and installs the new version.
+- **[App stores](#app-stores)** — install and update the apps you want without downgrading the car's firmware and without enabling ADB: an F-Droid store and a Google Play store right in the app's side menu, installing silently like OverDrive's own updates.
+- **Remote updates** — "Update available" shows in the car app, in the car's web interface and on your phone; one tap downloads, verifies (SHA-256) and installs the new version. Downloads resume after a dropped connection, so updates also work on the car's own mobile data.
 - **In-app downloads** — recordings download inside the web app with progress and cancel; on iPhone the finished file opens the share sheet ("Save Video") instead of a full-screen preview you can't leave.
 
 Release notes for this fork: [RELEASE_NOTES.md](RELEASE_NOTES.md) (Turkish) and the [Releases page](https://github.com/aliuysal60/Overdrive-Cloud/releases).
@@ -107,6 +109,7 @@ Prefer your own tunnel? Zrok, Cloudflared, Tailscale and WireGuard still work �
 - **Advanced Sentry Mode** — 24/7 surveillance with motion detection and AI object recognition
 - **Parked Keep-Alive (DiLink 5)** — Keeps the head unit awake while parked via OEM OTA-style CAN Network Management, so sentry/recording survives the vehicle's deep sleep. 12 V battery guard with configurable cutoff.
 - **OverDrive Cloud** — Reach the car from your phone anywhere: automatic enrollment, QR pairing, Google sign-in, push alerts and family sharing
+- **App Stores** — F-Droid and Google Play stores in the side menu; apps install, update and uninstall silently through OverDrive, no firmware downgrade or ADB needed
 - **Remote Updates** — One-tap updates from the car app, the car's web interface or your phone, verified with SHA-256 before install
 - **Real-time Performance Monitor** — CPU, GPU, memory usage, and battery voltage dashboard
 - **ISP Blocklist Bypass** — Browse via BYD's built-in SIM card without a dedicated hotspot
@@ -126,6 +129,18 @@ The easiest way to reach the car. Nothing to configure: no server, domain or tok
 **Updates:** when a new version is out, "Update available" shows in the car app at start, at the top right of the car's web interface and on the car's card in My cars — even when you are away from the car. One tap downloads the APK, checks its SHA-256 against the release, installs it and restarts the app. No ADB needed.
 
 What the cloud stores: your Google account id, email, name and picture URL; the cars you added; sessions; push subscriptions; and for each car its id, last connection time and IP, and app version. Keys are stored only as one-way hashes. Traffic to the car is relayed, but **camera images, location and vehicle data are never stored on the server**. See the [privacy notice](https://byd-gw.cloud.solucharger.com/gw/static/privacy.html).
+
+## App Stores
+
+Install and update the apps you want **without downgrading the car's firmware and without enabling ADB or developer options**. The car app's side menu has two stores that work like the ones on your phone: pick an app and OverDrive installs it the same way it installs its own updates — no confirmation screen, no "unknown sources" setting, no computer.
+
+| | **App Store (F-Droid)** | **Play Store** |
+|---|---|---|
+| Apps | Free, open-source apps from F-Droid and IzzyOnDroid (VLC, maps, music players…) | Apps from Google Play |
+| Client | [Droid-ify](https://github.com/aliuysal60/droid_ify_client) built for OverDrive (`com.overdrive.store`) | [Aurora Store](https://github.com/aliuysal60/AuroraStore) built for OverDrive (`com.overdrive.aurora`) |
+| Notes | Nothing to set up: the app list refreshes on mobile data too and installed APKs are deleted. Updates arrive as a notification and install with one tap; automatic updates can be turned on. | Sign in with your Google account or anonymously. Split APKs install, update and uninstall too. Apps that need Google Play Services (e.g. the official YouTube) may install but not run if the unit lacks those services. |
+
+**How it works:** on the first tap of a menu row, OverDrive downloads that store's latest release from GitHub, checks it against the SHA-256 GitHub publishes and installs it; when a store has a new release, it is updated before it opens. The store hands each APK to OverDrive, which streams it to the package manager over its ADB connection (like `adb install -r`), under the same install lock as OverDrive's own updates. Only stores signed with OverDrive's release key can make that request (a `signature`-level permission), and OverDrive itself, the stores and system apps are refused.
 
 ## Remote Access
 
@@ -525,6 +540,17 @@ If you've contributed substantial translations for a language, open an issue or 
 ## Changelog
 
 Release notes for this fork live in [RELEASE_NOTES.md](RELEASE_NOTES.md) (Turkish) and on the [Releases page](https://github.com/aliuysal60/Overdrive-Cloud/releases). Upstream releases up to v57.0 are on the [upstream Releases page](https://github.com/yash-srivastava/Overdrive-release/releases); condensed upstream highlights follow below.
+
+### v57.0.5 – v57.0.9 — November 2026: App stores & updates on mobile data
+
+**✨ New Features**
+- **App Store (F-Droid)** — An F-Droid / IzzyOnDroid store in the side menu; apps install, update and uninstall silently through OverDrive, no firmware downgrade or ADB needed
+- **Play Store** — A Google Play store (Aurora Store) right below it, including apps that ship as split APKs
+- **Self-updating stores** — OverDrive installs each store from GitHub on first use and updates it before it opens when a new release is out
+
+**⚡ Optimizations & Fixes**
+- **Updates on mobile data** — The update download resumes after a dropped connection (HTTP Range) instead of starting over, and is no longer cut by a fixed 10-minute limit while data keeps flowing
+- **Tang / Sealion 7 locking** — Locking from the phone or the screen works; lock state is read from car_service and confirmed there
 
 ### v57.0.1 – v57.0.4 — October 2026: OverDrive Cloud fork for the Tang & Sealion 7
 

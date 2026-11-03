@@ -46,6 +46,8 @@ public class FrpConfigTest {
         assertTrue(toml.contains("localPort = 8080\n"));
         assertTrue(toml.contains("customDomains = [\"car.example\"]\n"));
         assertTrue(toml.contains("loginFailExit = false\n"));
+        // frpc must not depend on a local resolver that vanishes when the car powers off
+        assertTrue(toml.contains("dnsServer = \"8.8.8.8\"\n"));
         // relayed requests must look remote to AuthMiddleware (login required)
         assertTrue(toml.contains("requestHeaders.set.x-forwarded-proto = \"https\"\n"));
     }

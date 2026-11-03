@@ -32,4 +32,14 @@ public final class FrpPaths {
 
     /** OverDrive's dashboard, the only service the tunnel publishes. */
     public static final int LOCAL_PORT = 8080;
+
+    /**
+     * DNS server frpc resolves the tunnel server with (frpc.toml {@code dnsServer}). frpc is a
+     * cgo-free Go binary and Android has no /etc/resolv.conf, so on its own it asks 127.0.0.1:53.
+     * On the Tang something answers there only while the car is on: after power-off every
+     * reconnect failed with "lookup ... on [::1]:53: connection refused" and the car stayed
+     * offline in the cloud until frpc restarted. frpc's own Android fallback (8.8.8.8) is
+     * chosen once at start-up, so it never kicks in when DNS goes away later.
+     */
+    public static final String DNS_SERVER = "8.8.8.8";
 }

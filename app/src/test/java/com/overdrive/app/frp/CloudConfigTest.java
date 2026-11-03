@@ -43,6 +43,8 @@ public class CloudConfigTest {
         assertTrue(toml.contains("serverAddr = \"frp.cloud.solucharger.com\"\n"));
         assertTrue(toml.contains("transport.protocol = \"wss\"\n"));
         assertTrue(toml.contains("transport.heartbeatInterval = 30\n"));
+        // frpc must not depend on a local resolver that vanishes when the car powers off
+        assertTrue(toml.contains("dnsServer = \"8.8.8.8\"\n"));
         assertTrue(toml.contains("metadatas.carId = \"km4ah2k7qcyh\"\n"));
         assertTrue(toml.contains("metadatas.carSecret = \"" + SECRET + "\"\n"));
         assertTrue(toml.contains("name = \"km4ah2k7qcyh\"\n"));

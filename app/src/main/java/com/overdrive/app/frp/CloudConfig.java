@@ -131,6 +131,8 @@ public final class CloudConfig {
                 + "transport.heartbeatInterval = 30\n"
                 + "transport.heartbeatTimeout = 90\n"
                 + "loginFailExit = false\n"
+                // Android has no resolv.conf for frpc; see FrpPaths.DNS_SERVER
+                + "dnsServer = \"" + FrpPaths.DNS_SERVER + "\"\n"
                 + "log.to = \"console\"\n"
                 + "log.level = \"info\"\n"
                 + "metadatas.carId = \"" + carId + "\"\n"

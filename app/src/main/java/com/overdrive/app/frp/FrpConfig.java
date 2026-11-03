@@ -78,6 +78,8 @@ public final class FrpConfig {
                 + "transport.protocol = \"" + (usesWebsocket() ? "wss" : "tcp") + "\"\n"
                 // keep retrying across network drops and sleep instead of exiting
                 + "loginFailExit = false\n"
+                // Android has no resolv.conf for frpc; see FrpPaths.DNS_SERVER
+                + "dnsServer = \"" + FrpPaths.DNS_SERVER + "\"\n"
                 + "log.to = \"console\"\n"
                 + "log.level = \"info\"\n"
                 + "\n"

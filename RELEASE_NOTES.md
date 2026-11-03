@@ -2,6 +2,10 @@
 
 BYD Tang ve Sealion 7 (DiLink 5, 51.1.x) için hazırlanan OverDrive sürümlerinin notları.
 
+## 57.0.10 — 2026-11-03
+
+- OverDrive Bulut: araç kapatıldıktan sonra (uyanık tut açıkken) telefonda "çevrimdışı" görünme sorunu düzeltildi. Araç kapanınca tünel, sunucu adresini çözemediği için yeniden bağlanamıyordu; artık adres çözümü araç açık da kapalı da olsa çalışıyor
+
 ## 57.0.9 — 2026-11-03
 
 - Güncelleme mobil veride de iniyor: bağlantı koparsa ya da takılırsa indirme baştan değil kaldığı yerden devam eder; veri aktığı sürece sabit 10 dakikalık süre sınırına takılıp düşmez (en fazla 60 dk, 4 dk hiç veri gelmezse vazgeçer)

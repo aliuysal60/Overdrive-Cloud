@@ -2,6 +2,11 @@
 
 BYD Tang ve Sealion 7 (DiLink 5, 51.1.x) için hazırlanan OverDrive sürümlerinin notları.
 
+## 57.0.9 — 2026-11-03
+
+- Güncelleme mobil veride de iniyor: bağlantı koparsa ya da takılırsa indirme baştan değil kaldığı yerden devam eder; veri aktığı sürece sabit 10 dakikalık süre sınırına takılıp düşmez (en fazla 60 dk, 4 dk hiç veri gelmezse vazgeçer)
+- Bu iyileştirme 57.0.9'dan sonraki güncellemelerde geçerlidir; 57.0.9'un kendisi eski indiriciyle iner (mümkünse Wi-Fi ile güncelleyin)
+
 ## 57.0.8 — 2026-11-03
 
 - Play Mağazası: sol menüde Uygulama Mağazası'nın altında. İlk basışta OverDrive Play Mağaza'yı (Google Play istemcisi, Aurora Store çatalı) kendiliğinden indirip kurar; Google Play'deki uygulamalar, parçalı APK'lar dahil, onay ekranı çıkmadan OverDrive üzerinden kurulur, güncellenir ve kaldırılır

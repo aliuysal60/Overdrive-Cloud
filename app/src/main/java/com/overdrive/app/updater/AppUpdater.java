@@ -100,20 +100,21 @@ public class AppUpdater {
     // Staleness MUST exceed the complete legitimate workflow, otherwise a
     // second update can seize the gate mid-first and clobber the shared
     // /data/local/tmp staging (the exact race the gate exists to prevent).
-    // Worst case: GitHub API (~30s) + download DOWNLOAD_DEADLINE_MS (640s)
-    // + wait margin + size check (~60s) + kill cascade prep (~60s) +
-    // install INSTALL_DEADLINE_MS (300s) + wait margin + rollback shell
-    // commands ≈ 1150s. 30 minutes clears that with real margin.
+    // Worst case: GitHub API (~30s) + direct download
+    // DIRECT_DOWNLOAD_BUDGET_MS (60 min, resumable on slow mobile data) +
+    // size/SHA checks (~3 min) + kill cascade prep (~60s) + install
+    // INSTALL_DEADLINE_MS (300s) + wait margins + rollback shell commands
+    // ≈ 70 min. 90 minutes clears that with real margin.
     //
     // Age-based takeover is only sound because EVERY leg is absolutely
     // bounded: the ADB tunnel via the bulk-lane watchdogs, the direct
-    // OkHttp download via doStreamingDownload's shared monotonic budget
+    // OkHttp download via ResumableDownload's absolute monotonic budget
     // (per-read timeouts alone never bound a slow-but-flowing stream), and
     // direct process execution via runShellDirect's destroy-at-deadline
     // reaper. The flag is static/in-JVM — process death (the SUCCESS path
     // of a core install) clears it instantly — so this threshold only
     // delays recovery from a missed endInstall() bug, never normal use.
-    private static final long INSTALL_STALE_MS = 30 * 60 * 1000L;
+    private static final long INSTALL_STALE_MS = 90 * 60 * 1000L;
 
     /**
      * Try to acquire the single-install gate. Returns true if the caller now
@@ -441,7 +442,10 @@ public class AppUpdater {
     // rollback). The executor guarantees a callback within its deadline
     // (the watchdog closes the dedicated connection), so waiting
     // deadline+margin can never hang.
-    private static final long DOWNLOAD_DEADLINE_MS = 640_000L; // cmd self-caps at 600s
+    private static final long DOWNLOAD_DEADLINE_MS = 640_000L; // shell fallback: cmd self-caps at 600s
+    // Direct (daemon) download: ResumableDownload's absolute budget. The
+    // install gate's INSTALL_STALE_MS must stay well above it.
+    private static final long DIRECT_DOWNLOAD_BUDGET_MS = ResumableDownload.UPDATE_LIMITS.totalBudgetMs;
     private static final long INSTALL_DEADLINE_MS = 300_000L;
     private static final long WAIT_MARGIN_MS = 20_000L;
 
@@ -1172,11 +1176,11 @@ public class AppUpdater {
                 //     8119 (or Tailscale 8539) the same way every other
                 //     network call in the project does. Streams the body to
                 //     /data/local/tmp/ and emits real progress percent.
-                //     Connect timeout caps wedged TCP at 15s; readTimeout is
-                //     also 15s (per-read, not whole-download) so a stalled
-                //     CDN throws SocketTimeoutException instead of hanging
-                //     indefinitely. Healthy slow downloads keep flowing
-                //     because each successful read resets the timer.
+                //     Resumable (ResumableDownload): a dropped or stalled
+                //     (60s) connection resumes from the bytes on disk, so slow
+                //     car mobile data finishes instead of restarting from zero.
+                //     This is the path every surface uses (the car screen goes
+                //     through IPC INSTALL_UPDATE to the daemon).
                 //   - App process (UID 10xxx): falls back to the shell tunnel
                 //     because the app UID can't write to /data/local/tmp/.
                 //     Shell command now carries explicit timeout flags so a
@@ -1767,146 +1771,65 @@ public class AppUpdater {
     }
 
     /**
-     * Stream an APK download to disk via OkHttp, emitting real percent
-     * progress to the install callback. Used by the daemon-process path
-     * (UID 2000) where we have direct write access to /data/local/tmp/
-     * and can route through ProxyHelper.getHttpProxy() — same proxy the
-     * rest of the app uses for outbound HTTP.
+     * Download the APK straight into the scratch dir (daemon UID 2000) with
+     * real percent progress. Every update surface — the car screen
+     * (MainActivity → IPC INSTALL_UPDATE), the web UI/cloud and Telegram —
+     * runs downloadAndInstall in the daemon, so this is THE update download.
      *
-     * Timeout policy:
-     *   - connectTimeout = 15s  (covers slow handshake / blocked egress)
-     *   - readTimeout    = 15s per read, NOT whole download
+     * {@link ResumableDownload} keeps the bytes of a dropped connection and
+     * resumes with Range/If-Range, tolerates 60 s stalls, retries while data
+     * keeps arriving, and gives up only after 4 min without a new byte or
+     * {@link #DIRECT_DOWNLOAD_BUDGET_MS} overall. Before it, a 140 MB update
+     * on the car's mobile data died on a fixed 640 s budget or a 15 s stall
+     * and restarted from zero ("updates only work on Wi-Fi"). Attempts go
+     * through ProxyHelper's proxy (sing-box / Tailscale) and switch to a
+     * direct connection after a proxy attempt fails without progress.
      *
-     * OkHttp's readTimeout fires only when no bytes arrive for that many
-     * seconds. A healthy slow link that delivers a packet every few
-     * seconds keeps progressing. A wedged CDN socket where bytes stop
-     * flowing throws SocketTimeoutException within 15s, which we surface
-     * as a clean "Download failed" instead of the 5-minute hang the old
-     * shell-wget path produced.
-     *
-     * Throws on any failure; caller wraps in dlResult[]. Honors
-     * {@link #cancelled} between reads so the dialog's Cancel button
-     * stops the transfer within one buffer's worth.
+     * Throws on failure (the caller wraps it in dlResult[]); the partial file
+     * is deleted. Honors {@link #cancelled} and {@link #cancel()}.
      */
     private void downloadApkOkHttp(String url, String outputPath, InstallCallback callback)
             throws Exception {
-        // Drop any stale APK from a previous attempt so a partial download
-        // can't be confused with a complete one if we fail mid-stream.
-        new File(outputPath).delete();
-
-        // ONE absolute monotonic budget across BOTH attempts (primary +
-        // no-proxy retry). OkHttp's 15s readTimeout is per-read: a stream
-        // that trickles a packet every few seconds resets it forever, so
-        // without an absolute cap a slow CDN could hold the install gate
-        // past its staleness window — letting a second update seize the
-        // gate and delete this APK mid-download. Sharing the budget across
-        // the retry keeps the whole download phase ≤ DOWNLOAD_DEADLINE_MS,
-        // which the gate's staleness math relies on.
-        final long deadlineNanos = System.nanoTime() + DOWNLOAD_DEADLINE_MS * 1_000_000L;
-
+        final File out = new File(outputPath);
+        final int[] lastPct = {-1};
         boolean completed = false;
         try {
-            java.net.Proxy proxy = com.overdrive.app.mqtt.ProxyHelper.getHttpProxy();
-            boolean usedProxy = proxy != null && proxy.type() != java.net.Proxy.Type.DIRECT;
-            try {
-                doStreamingDownload(url, outputPath, proxy, callback, deadlineNanos);
-            } catch (Exception primary) {
-                // If we tried via sing-box/Tailscale and failed, the proxy may
-                // have died mid-flight (sing-box restart, Tailscale link drop).
-                if (cancelled) throw primary;
-                if (!usedProxy) throw primary;
-                Log.w(TAG, "Download via proxy failed (" + primary.getMessage()
-                        + "); retrying direct");
-                com.overdrive.app.mqtt.ProxyHelper.invalidateCache();
-                try {
-                    doStreamingDownload(url, outputPath, java.net.Proxy.NO_PROXY, callback, deadlineNanos);
-                } catch (Exception retry) {
-                    throw new java.io.IOException(
-                            primary.getMessage() + " (direct retry: " + retry.getMessage() + ")");
-                }
-            }
+            long bytes = ResumableDownload.run(url, out, ResumableDownload.UPDATE_LIMITS,
+                    new ResumableDownload.Route() {
+                        @Override public java.net.Proxy current() {
+                            return com.overdrive.app.mqtt.ProxyHelper.getHttpProxy();
+                        }
+                        @Override public void invalidate() {
+                            com.overdrive.app.mqtt.ProxyHelper.invalidateCache();
+                        }
+                    },
+                    () -> cancelled,
+                    new ResumableDownload.Listener() {
+                        @Override public void onProgress(long done, long total) {
+                            if (total <= 0) return;
+                            int pct = (int) Math.min(99, (done * 100L) / total);
+                            if (pct == lastPct[0]) return;
+                            lastPct[0] = pct;
+                            runCallback(() -> callback.onDownloadProgress(pct));
+                        }
+                        @Override public void onRetry(int attempt, String reason, long done, long total) {
+                            Log.w(TAG, "Update download attempt " + attempt + " failed at "
+                                    + done + "/" + total + " bytes (" + reason + "); resuming");
+                            // Re-report the current percent: refreshes the progress
+                            // file's timestamp so the app/web pollers' 5-min
+                            // "stuck" rule never fires while we are retrying.
+                            final int pct = lastPct[0];
+                            runCallback(() -> callback.onDownloadProgress(pct));
+                        }
+                        @Override public void onCall(okhttp3.Call call) {
+                            activeCall = call;
+                        }
+                    });
+            Log.i(TAG, "APK downloaded: " + bytes + " bytes → " + outputPath);
             completed = true;
         } finally {
-            if (!completed) new File(outputPath).delete();
-        }
-    }
-
-    /**
-     * Single-shot streaming download. Caller decides whether to retry.
-     */
-    private void doStreamingDownload(String url, String outputPath,
-                                     java.net.Proxy proxy, InstallCallback callback,
-                                     long deadlineNanos)
-            throws Exception {
-        if (System.nanoTime() > deadlineNanos) {
-            throw new java.io.IOException("Download deadline exceeded before attempt");
-        }
-        OkHttpClient.Builder builder = new OkHttpClient.Builder()
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(15, TimeUnit.SECONDS)
-                .followRedirects(true);
-        if (proxy != null && proxy.type() != java.net.Proxy.Type.DIRECT) {
-            builder.proxy(proxy);
-        }
-        OkHttpClient client = builder.build();
-
-        Request req = new Request.Builder().url(url).build();
-        okhttp3.Call call = client.newCall(req);
-        activeCall = call;
-        Response resp;
-        try {
-            resp = call.execute();
-        } catch (Exception e) {
             activeCall = null;
-            throw e;
-        }
-        try {
-            if (!resp.isSuccessful()) {
-                throw new java.io.IOException("HTTP " + resp.code() + " " + resp.message());
-            }
-            long total = resp.body() != null ? resp.body().contentLength() : -1;
-            int lastReportedPct = -1;
-            long bytesRead = 0;
-
-            // Drop any partial bytes from a failed prior proxy attempt before
-            // the retry rewrites the file from scratch.
-            new File(outputPath).delete();
-
-            try (InputStream in = resp.body().byteStream();
-                 FileOutputStream fos = new FileOutputStream(outputPath)) {
-                byte[] buf = new byte[64 * 1024];
-                int n;
-                while ((n = in.read(buf)) != -1) {
-                    if (cancelled) {
-                        throw new java.io.IOException("Cancelled");
-                    }
-                    // Absolute cap — per-read timeouts reset on every packet
-                    // and never bound a slow-but-flowing stream (see caller).
-                    if (System.nanoTime() > deadlineNanos) {
-                        throw new java.io.IOException("Download exceeded "
-                                + (DOWNLOAD_DEADLINE_MS / 1000) + "s deadline");
-                    }
-                    fos.write(buf, 0, n);
-                    bytesRead += n;
-                    if (total > 0) {
-                        int pct = (int) Math.min(99, (bytesRead * 100L) / total);
-                        if (pct != lastReportedPct) {
-                            lastReportedPct = pct;
-                            final int report = pct;
-                            runCallback(() -> callback.onDownloadProgress(report));
-                        }
-                    }
-                }
-                fos.flush();
-            }
-            Log.i(TAG, "APK downloaded: " + bytesRead + " bytes → " + outputPath
-                    + " (proxy=" + (proxy != null ? proxy.type() : "DIRECT") + ")");
-        } finally {
-            try { resp.close(); } catch (Exception ignored) {}
-            // Release the cancel hook so a follow-up cancel() doesn't try
-            // to tear down a finished call. Set to null AFTER close so a
-            // racing cancel still hits Call.cancel on the live socket.
-            activeCall = null;
+            if (!completed) out.delete();
         }
     }
 

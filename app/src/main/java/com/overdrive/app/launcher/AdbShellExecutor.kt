@@ -521,8 +521,35 @@ class AdbShellExecutor(private val context: Context) {
     }
 
     /**
-     * Shared body of [executeBulk] / [installBulk]: runs [op] on a dedicated
-     * connection; exit code 0 reports onSuccess, anything else onError.
+     * [installBulk] for a split APK set (base + config splits) in one session:
+     * `cmd package install-create` / `install-write -S` per file /
+     * `install-commit`, what `adb install-multiple` does — streamed, nothing
+     * staged on the device.
+     */
+    fun installMultipleBulk(
+        apks: List<File>,
+        options: Array<String>,
+        deadlineMs: Long,
+        callback: ShellCallback
+    ) {
+        val seq = cmdSeq.incrementAndGet()
+        logger.debug(TAG, "adb#$seq SUBMIT-INSTALL-MULTIPLE deadline=${deadlineMs}ms: " +
+            "${apks.size} files, ${apks.sumOf { it.length() }}B ${options.joinToString(" ")}")
+        runBulk(seq, "<install-multiple:${apks.size}>", deadlineMs, callback) { adb ->
+            if (!adb.supportsFeature("cmd")) {
+                // dadb would fall back to push + pm install, which this adbd refuses.
+                ShellResult(1, "adbd has no 'cmd' feature (no streamed install)")
+            } else {
+                adb.installMultiple(apks, *options)   // throws IOException unless committed
+                ShellResult(0, "Success")
+            }
+        }
+    }
+
+    /**
+     * Shared body of [executeBulk] / [installBulk] / [installMultipleBulk]:
+     * runs [op] on a dedicated connection; exit code 0 reports onSuccess,
+     * anything else onError.
      */
     private fun runBulk(
         seq: Int,

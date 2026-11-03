@@ -11,9 +11,9 @@ import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 /**
- * The store's release APK is named `OverDriveStore-<versionCode>.apk`; its versionCode is
- * upstream Droid-ify's * 100 + OverDrive's revision. Comparing that number with the
- * installed store's versionCode tells whether to update.
+ * A store's release APK is named `<Name>-<versionCode>.apk` (OverDriveStore-78001.apk,
+ * OverDrivePlayStore-7601.apk); its versionCode is upstream's * 100 + OverDrive's revision.
+ * Comparing that number with the installed store's versionCode tells whether to update.
  *
  * The APK is downloaded here, in the app process, with OkHttp (HTTPS and GitHub's redirect
  * to its download host), not with the shell's wget: the head unit's toybox wget is a bare
@@ -54,15 +54,15 @@ object StoreReleases {
         return null
     }
 
-    /** Blocking: the latest release, or null on any failure. */
-    fun fetchLatest(): Release? = try {
+    /** Blocking: the latest release of [repo] ("owner/name"), or null on any failure. */
+    fun fetchLatest(repo: String): Release? = try {
         val client = OkHttpClient.Builder()
             .connectTimeout(CHECK_TIMEOUT_S, TimeUnit.SECONDS)
             .readTimeout(CHECK_TIMEOUT_S, TimeUnit.SECONDS)
             .callTimeout(CHECK_TIMEOUT_S * 2, TimeUnit.SECONDS)
             .build()
         val request = Request.Builder()
-            .url("https://api.github.com/repos/${StoreLauncher.RELEASE_REPO}/releases/latest")
+            .url("https://api.github.com/repos/$repo/releases/latest")
             .header("Accept", "application/vnd.github+json")
             .build()
         client.newCall(request).execute().use { response ->

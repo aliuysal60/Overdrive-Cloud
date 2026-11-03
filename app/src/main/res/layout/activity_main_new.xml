@@ -101,6 +101,13 @@
                         layout="@layout/item_rail_destination"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content" />
+                    <!-- OverDrive Play Store (Aurora Store fork): Google Play apps, same
+                         install-or-open flow (StoreLauncher.Store.PLAY). Fixed row. -->
+                    <include
+                        android:id="@+id/railDestPlayStore"
+                        layout="@layout/item_rail_destination"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
                     <!-- Category headers group the rows from here down. Each one
                          hides when every row under it is unpinned — see
                          MainActivity.applyNavigationRailVisibility. -->

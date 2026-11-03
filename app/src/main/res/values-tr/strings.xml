@@ -1462,9 +1462,12 @@
     <string name="nav_page_assistant">Asistan</string>
     <string name="rail_assistant">Asistan</string>
     <string name="rail_store">Uygulama Mağazası</string>
-    <string name="store_installing">OverDrive Mağaza kuruluyor…</string>
-    <string name="store_updating">OverDrive Mağaza güncelleniyor…</string>
-    <string name="store_install_failed">OverDrive Mağaza kurulamadı: %1$s</string>
+    <string name="rail_play_store">Play Mağazası</string>
+    <string name="store_name_fdroid">OverDrive Mağaza</string>
+    <string name="store_name_play">OverDrive Play Mağaza</string>
+    <string name="store_installing">%1$s kuruluyor…</string>
+    <string name="store_updating">%1$s güncelleniyor…</string>
+    <string name="store_install_failed">%1$s kurulamadı: %2$s</string>
     <string name="rail_key_mapping">Tuş eşleme</string>
     <string name="rail_seat_positions">Koltuk konumları</string>
     <string name="rail_expand">Gezinme etiketlerini göster</string>

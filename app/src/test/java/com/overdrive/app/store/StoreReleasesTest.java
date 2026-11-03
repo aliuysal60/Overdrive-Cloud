@@ -10,6 +10,7 @@ public class StoreReleasesTest {
     @Test
     public void versionCodeComesFromTheApkFileName() {
         assertEquals(Long.valueOf(78001L), StoreReleases.versionCodeOf("OverDriveStore-78001.apk"));
+        assertEquals(Long.valueOf(7601L), StoreReleases.versionCodeOf("OverDrivePlayStore-7601.apk"));
         assertEquals(Long.valueOf(78112L), StoreReleases.versionCodeOf("OverDriveStore-0.7.8-78112.apk"));
     }
 

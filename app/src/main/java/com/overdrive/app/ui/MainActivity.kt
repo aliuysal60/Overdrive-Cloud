@@ -101,6 +101,7 @@ open class MainActivity : AppCompatActivity() {
     private val RAIL_KEY_SETTINGS = "settings"
     private val RAIL_KEY_ABOUT = "about"
     private val RAIL_KEY_STORE = "store"
+    private val RAIL_KEY_PLAY_STORE = "play_store"
     private val KEY_RAIL_EXPANDED = "navigation_rail_expanded"
     // M3 emphasized-decelerate — same curve ZoomableVideoView uses, so the rail
     // shares the app's motion vocabulary instead of a stock Decelerate.
@@ -1761,7 +1762,16 @@ open class MainActivity : AppCompatActivity() {
             // Fixed row (its key is not in the pin catalog), so it is always shown.
             RailItem(RAIL_KEY_STORE, R.id.railDestStore, 0,
                 R.drawable.ic_store, R.string.rail_store,
-                onClick = { com.overdrive.app.store.StoreLauncher.openOrInstall(this) }),
+                onClick = {
+                    com.overdrive.app.store.StoreLauncher.openOrInstall(
+                        this, com.overdrive.app.store.StoreLauncher.Store.FDROID)
+                }),
+            RailItem(RAIL_KEY_PLAY_STORE, R.id.railDestPlayStore, 0,
+                R.drawable.ic_play_store, R.string.rail_play_store,
+                onClick = {
+                    com.overdrive.app.store.StoreLauncher.openOrInstall(
+                        this, com.overdrive.app.store.StoreLauncher.Store.PLAY)
+                }),
             RailItem(NavigationRailCatalog.LIVE, R.id.railDestLive, R.id.liveViewFragment,
                 R.drawable.ic_live, R.string.rail_live),
             RailItem(NavigationRailCatalog.RECORDINGS, R.id.railDestRecordings,

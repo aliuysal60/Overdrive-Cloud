@@ -32,9 +32,40 @@ public class StoreInstallerTest {
     }
 
     @Test
+    public void splitSetsNeedOneValidHashPerApk() {
+        String[] two = {ABC_SHA256, ABC_SHA256.toUpperCase()};
+        assertNull(StoreInstaller.refuseInstallRequest("com.google.android.youtube", two, 2));
+        assertEquals("no APK",
+                StoreInstaller.refuseInstallRequest("com.google.android.youtube", new String[0], 0));
+        assertEquals("SHA-256 count does not match the APKs",
+                StoreInstaller.refuseInstallRequest("com.google.android.youtube", two, 3));
+        assertEquals("SHA-256 count does not match the APKs",
+                StoreInstaller.refuseInstallRequest("com.google.android.youtube", null, 2));
+        assertEquals("invalid SHA-256", StoreInstaller.refuseInstallRequest(
+                "com.google.android.youtube", new String[] {ABC_SHA256, "x"}, 2));
+        String[] many = new String[StoreInstaller.MAX_SPLITS + 1];
+        java.util.Arrays.fill(many, ABC_SHA256);
+        assertEquals("too many APKs", StoreInstaller.refuseInstallRequest(
+                "com.google.android.youtube", many, many.length));
+        // The name check comes first, so a protected package is refused whatever the files.
+        assertEquals("com.overdrive.aurora is managed by OverDrive",
+                StoreInstaller.refuseInstallRequest("com.overdrive.aurora", two, 2));
+    }
+
+    @Test
+    public void onlyOverDrivesTwoStoresAreStores() {
+        assertTrue(StoreInstaller.isStorePackage("com.overdrive.store"));
+        assertTrue(StoreInstaller.isStorePackage("com.overdrive.aurora"));
+        assertFalse(StoreInstaller.isStorePackage("com.aurora.store"));
+        assertFalse(StoreInstaller.isStorePackage("com.overdrive.app"));
+        assertFalse(StoreInstaller.isStorePackage(null));
+    }
+
+    @Test
     public void overDriveManagedPackagesAreRefused() {
         for (String managed : new String[] {
-                "com.overdrive.app", "com.overdrive.store", "com.overdrive.launcher"}) {
+                "com.overdrive.app", "com.overdrive.store", "com.overdrive.aurora",
+                "com.overdrive.launcher"}) {
             String refusal = StoreInstaller.refusePackageName(managed);
             assertEquals(managed + " is managed by OverDrive", refusal);
             assertEquals(refusal, StoreInstaller.refuseInstallRequest(managed, ABC_SHA256));
@@ -125,6 +156,8 @@ public class StoreInstallerTest {
         assertTrue(adb.contains("adb.supportsFeature(\"cmd\")"));
         assertTrue(adb.contains("adb.install(apk, *options)"));
         assertTrue(installer.contains("adb().installBulk("));
+        assertTrue(installer.contains("adb().installMultipleBulk("));
+        assertTrue(adb.contains("adb.installMultiple(apks, *options)"));
         assertTrue(installer.contains("{\"-r\", \"-d\"}"));
         assertFalse(installer.contains("pushBulk"));
     }

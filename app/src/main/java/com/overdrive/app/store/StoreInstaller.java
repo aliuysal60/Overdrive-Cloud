@@ -18,6 +18,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -43,11 +46,19 @@ import java.util.regex.Pattern;
 public final class StoreInstaller {
     private static final String TAG = "StoreInstaller";
 
+    /** OverDrive Store, the Droid-ify fork (F-Droid apps). */
     public static final String STORE_PACKAGE = "com.overdrive.store";
-    /** Packages OverDrive manages itself; the store may not replace or remove them. */
+    /** OverDrive Play Store, the Aurora Store fork (Google Play apps). */
+    public static final String AURORA_PACKAGE = "com.overdrive.aurora";
+    /** OverDrive's stores: the only callers StoreInstallService serves. */
+    static final String[] STORE_PACKAGES = {STORE_PACKAGE, AURORA_PACKAGE};
+    /** Packages OverDrive manages itself; a store may not replace or remove them. */
     static final String[] PROTECTED_PACKAGES = {
-            "com.overdrive.app", STORE_PACKAGE, "com.overdrive.launcher"};
+            "com.overdrive.app", STORE_PACKAGE, AURORA_PACKAGE, "com.overdrive.launcher"};
     static final long MAX_APK_BYTES = 1024L * 1024L * 1024L;
+    static final long MAX_TOTAL_BYTES = 4L * 1024L * 1024L * 1024L;
+    /** At most this many files in one split APK set. */
+    static final int MAX_SPLITS = 64;
 
     private static final Pattern PACKAGE_NAME =
             Pattern.compile("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+");
@@ -58,6 +69,8 @@ public final class StoreInstaller {
     // store can also install an older version of an app the user picked.
     private static final String[] INSTALL_OPTIONS = {"-r", "-d"};
     private static final long PM_DEADLINE_MS = 300_000L;
+    // A split set (Play apps) can be several hundred MB in one session.
+    private static final long PM_MULTIPLE_DEADLINE_MS = 600_000L;
     // The executor guarantees a callback by its deadline; the margin only covers delivery.
     private static final long WAIT_MARGIN_MS = 20_000L;
 
@@ -110,8 +123,19 @@ public final class StoreInstaller {
     /** Install or update {@code packageName} from {@code apk}; closes {@code apk}. */
     public void install(ParcelFileDescriptor apk, String sha256, String packageName,
                         ResultCallback callback) {
+        ParcelFileDescriptor[] apks = apk == null ? null : new ParcelFileDescriptor[] {apk};
         executor.execute(() -> deliver(callback, packageName, "install",
-                runInstall(apk, sha256, packageName)));
+                runInstall(apks, new String[] {sha256}, packageName)));
+    }
+
+    /**
+     * Install or update {@code packageName} from a split APK set in one session;
+     * {@code sha256s[i]} is the hash of {@code apks[i]}. Closes every descriptor.
+     */
+    public void installMultiple(ParcelFileDescriptor[] apks, String[] sha256s, String packageName,
+                                ResultCallback callback) {
+        executor.execute(() -> deliver(callback, packageName, "install",
+                runInstall(apks, sha256s, packageName)));
     }
 
     public void uninstall(String packageName, ResultCallback callback) {
@@ -120,25 +144,24 @@ public final class StoreInstaller {
     }
 
     /**
-     * Install or update OverDrive Store itself from {@code apk}, which OverDrive downloaded
-     * ({@link StoreLauncher}); deletes {@code apk}. In-process only — the binder service never
-     * reaches this, and the store may not replace itself through {@link #install}.
+     * Install or update one of OverDrive's stores ({@link #STORE_PACKAGES}) from {@code apk},
+     * which OverDrive downloaded ({@link StoreLauncher}); deletes {@code apk}. In-process only —
+     * the binder service never reaches this, and a store may not replace itself through
+     * {@link #install}.
      */
-    public void installStore(File apk, ResultCallback callback) {
-        executor.execute(() -> deliver(callback, STORE_PACKAGE, "install", runInstallStore(apk)));
+    public void installStore(File apk, String storePackage, ResultCallback callback) {
+        executor.execute(() -> deliver(callback, storePackage, "install",
+                runInstallStore(apk, storePackage)));
     }
 
-    private Outcome runInstallStore(File apk) {
+    private Outcome runInstallStore(File apk, String storePackage) {
         try {
-            PackageInfo archive = context.getPackageManager()
-                    .getPackageArchiveInfo(apk.getPath(), 0);
-            if (archive == null) return Outcome.fail("not a valid APK");
-            if (!STORE_PACKAGE.equals(archive.packageName)) {
-                return Outcome.fail("APK is " + archive.packageName + ", not " + STORE_PACKAGE);
-            }
+            if (!isStorePackage(storePackage)) return Outcome.fail(storePackage + " is not a store");
+            String refusal = refuseArchivePackages(storePackage, Collections.singletonList(apk));
+            if (refusal != null) return Outcome.fail(refusal);
             if (!AppUpdater.tryBeginInstall()) return Outcome.fail("another install is in progress");
             try {
-                return pmInstall(apk);
+                return pmInstall(Collections.singletonList(apk));
             } finally {
                 AppUpdater.endInstall();
             }
@@ -165,10 +188,48 @@ public final class StoreInstaller {
     }
 
     static String refuseInstallRequest(String packageName, String sha256) {
+        return refuseInstallRequest(packageName, new String[] {sha256}, 1);
+    }
+
+    /** Why an install of {@code apkCount} files with these hashes is refused, or null. */
+    static String refuseInstallRequest(String packageName, String[] sha256s, int apkCount) {
         String refusal = refusePackageName(packageName);
         if (refusal != null) return refusal;
-        if (sha256 == null || !SHA256_HEX.matcher(sha256).matches()) return "invalid SHA-256";
+        if (apkCount < 1) return "no APK";
+        if (apkCount > MAX_SPLITS) return "too many APKs";
+        if (sha256s == null || sha256s.length != apkCount) {
+            return "SHA-256 count does not match the APKs";
+        }
+        for (String sha256 : sha256s) {
+            if (sha256 == null || !SHA256_HEX.matcher(sha256).matches()) return "invalid SHA-256";
+        }
         return null;
+    }
+
+    static boolean isStorePackage(String packageName) {
+        for (String store : STORE_PACKAGES) {
+            if (store.equals(packageName)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Why these APKs are not {@code packageName}, or null. A config split may not parse on
+     * its own (null archive) and is skipped — pm checks the set's consistency at commit — but
+     * every APK that does parse must declare {@code packageName}, and at least one must.
+     */
+    private String refuseArchivePackages(String packageName, List<File> apks) {
+        boolean declared = false;
+        for (File apk : apks) {
+            PackageInfo archive = context.getPackageManager()
+                    .getPackageArchiveInfo(apk.getPath(), 0);
+            if (archive == null) continue;
+            if (!packageName.equals(archive.packageName)) {
+                return "APK is " + archive.packageName + ", not " + packageName;
+            }
+            declared = true;
+        }
+        return declared ? null : "not a valid APK";
     }
 
     /** Why the INSTALLED {@code packageName} may not be changed, or null (also when absent). */
@@ -193,27 +254,40 @@ public final class StoreInstaller {
 
     // ---------------------------------------------------------------- install
 
-    private Outcome runInstall(ParcelFileDescriptor apk, String sha256, String packageName) {
-        InputStream in = apk == null ? null : new ParcelFileDescriptor.AutoCloseInputStream(apk);
-        File local = null;
+    /** One APK or a split set: copy + hash each, check the package, install in one session. */
+    private Outcome runInstall(ParcelFileDescriptor[] apks, String[] sha256s, String packageName) {
+        List<File> local = new ArrayList<>();
         try {
-            String refusal = refuseInstallRequest(packageName, sha256);
-            if (refusal == null && in == null) refusal = "no APK";
+            String refusal = refuseInstallRequest(packageName, sha256s,
+                    apks == null ? 0 : apks.length);
+            if (refusal == null) {
+                for (ParcelFileDescriptor apk : apks) {
+                    if (apk == null) refusal = "no APK";
+                }
+            }
             if (refusal == null) refusal = refuseInstalledPackage(packageName);
             if (refusal != null) return Outcome.fail(refusal);
 
             File dir = new File(context.getCacheDir(), "store_install");
             if (!dir.isDirectory() && !dir.mkdirs()) return Outcome.fail("cache unavailable");
-            local = new File(dir, "install-" + System.nanoTime() + ".apk");
-            String actual = copyAndHash(in, local, MAX_APK_BYTES);
-            if (!actual.equalsIgnoreCase(sha256)) return Outcome.fail("SHA-256 mismatch");
-
-            PackageInfo archive = context.getPackageManager()
-                    .getPackageArchiveInfo(local.getPath(), 0);
-            if (archive == null) return Outcome.fail("not a valid APK");
-            if (!packageName.equals(archive.packageName)) {
-                return Outcome.fail("APK is " + archive.packageName + ", not " + packageName);
+            long stamp = System.nanoTime();
+            long total = 0;
+            for (int i = 0; i < apks.length; i++) {
+                File file = new File(dir, "install-" + stamp + "-" + i + ".apk");
+                local.add(file);
+                String actual;
+                try (InputStream in = new ParcelFileDescriptor.AutoCloseInputStream(apks[i])) {
+                    apks[i] = null; // the stream owns (and closes) it now
+                    actual = copyAndHash(in, file, MAX_APK_BYTES);
+                }
+                if (!actual.equalsIgnoreCase(sha256s[i])) return Outcome.fail("SHA-256 mismatch");
+                total += file.length();
+                if (total > MAX_TOTAL_BYTES) {
+                    return Outcome.fail("APKs larger than " + MAX_TOTAL_BYTES + " bytes");
+                }
             }
+            refusal = refuseArchivePackages(packageName, local);
+            if (refusal != null) return Outcome.fail(refusal);
 
             if (!AppUpdater.tryBeginInstall()) return Outcome.fail("another install is in progress");
             try {
@@ -227,18 +301,30 @@ public final class StoreInstaller {
             Thread.currentThread().interrupt();
             return Outcome.fail("interrupted");
         } finally {
-            closeQuietly(in);
-            if (local != null && local.exists() && !local.delete()) {
-                Log.w(TAG, "could not delete " + local);
+            if (apks != null) {
+                for (ParcelFileDescriptor apk : apks) closeQuietly(apk);
+            }
+            for (File file : local) {
+                if (file.exists() && !file.delete()) Log.w(TAG, "could not delete " + file);
             }
         }
     }
 
-    /** Stream {@code local} to the package manager over ADB (adb install -r -d). */
-    private Outcome pmInstall(File local) throws InterruptedException {
-        ShellOutcome installed = await(cb -> adb().installBulk(
-                        local, INSTALL_OPTIONS, PM_DEADLINE_MS, cb),
-                PM_DEADLINE_MS + WAIT_MARGIN_MS);
+    /**
+     * Stream the APK(s) to the package manager over ADB: one file like
+     * {@code adb install -r -d}, a split set like {@code adb install-multiple -r -d}.
+     */
+    private Outcome pmInstall(List<File> apks) throws InterruptedException {
+        ShellOutcome installed;
+        if (apks.size() == 1) {
+            installed = await(cb -> adb().installBulk(
+                            apks.get(0), INSTALL_OPTIONS, PM_DEADLINE_MS, cb),
+                    PM_DEADLINE_MS + WAIT_MARGIN_MS);
+        } else {
+            installed = await(cb -> adb().installMultipleBulk(
+                            apks, INSTALL_OPTIONS, PM_MULTIPLE_DEADLINE_MS, cb),
+                    PM_MULTIPLE_DEADLINE_MS + WAIT_MARGIN_MS);
+        }
         return installed.ok ? Outcome.ok() : pmOutcome(installed.text);
     }
 
@@ -358,10 +444,10 @@ public final class StoreInstaller {
         }
     }
 
-    private static void closeQuietly(InputStream in) {
-        if (in == null) return;
+    private static void closeQuietly(ParcelFileDescriptor fd) {
+        if (fd == null) return;
         try {
-            in.close();
+            fd.close();
         } catch (IOException ignored) {
         }
     }

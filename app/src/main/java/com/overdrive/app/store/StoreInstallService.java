@@ -12,7 +12,6 @@ import android.os.RemoteException;
 import android.util.Log;
 
 import java.io.IOException;
-import java.util.Arrays;
 
 /**
  * Bound by OverDrive Store to install, update and uninstall apps without a prompt. Binding
@@ -23,7 +22,10 @@ import java.util.Arrays;
  */
 public final class StoreInstallService extends Service {
     private static final String TAG = "StoreInstallService";
+    /** Base version; stays 1 because OverDrive Store 0.7.8-od.1 requires exactly 1. */
     static final int API_VERSION = 1;
+    /** 2: installMultiple (split APK sets). */
+    static final int API_LEVEL = 2;
 
     private final IStoreInstaller.Stub binder = new IStoreInstaller.Stub() {
         @Override
@@ -52,6 +54,25 @@ public final class StoreInstallService extends Service {
             StoreInstaller.get(StoreInstallService.this).uninstall(packageName,
                     (success, message) -> reply(callback, success, message));
         }
+
+        @Override
+        public int apiLevel() {
+            return API_LEVEL;
+        }
+
+        @Override
+        public void installMultiple(ParcelFileDescriptor[] apks, String[] sha256s,
+                                    String packageName, IStoreInstallCallback callback) {
+            if (!callerIsStore()) {
+                if (apks != null) {
+                    for (ParcelFileDescriptor apk : apks) closeQuietly(apk);
+                }
+                reply(callback, false, "caller is not OverDrive Store");
+                return;
+            }
+            StoreInstaller.get(StoreInstallService.this).installMultiple(apks, sha256s,
+                    packageName, (success, message) -> reply(callback, success, message));
+        }
     };
 
     @Override
@@ -59,13 +80,18 @@ public final class StoreInstallService extends Service {
         return binder;
     }
 
-    /** The binder caller is the store package, signed with the same key as OverDrive. */
+    /** The binder caller is one of OverDrive's stores, signed with OverDrive's own key. */
     private boolean callerIsStore() {
         int uid = Binder.getCallingUid();
         PackageManager pm = getPackageManager();
         String[] packages = pm.getPackagesForUid(uid);
-        boolean isStore = packages != null
-                && Arrays.asList(packages).contains(StoreInstaller.STORE_PACKAGE)
+        boolean storePackage = false;
+        if (packages != null) {
+            for (String pkg : packages) {
+                if (StoreInstaller.isStorePackage(pkg)) storePackage = true;
+            }
+        }
+        boolean isStore = storePackage
                 && pm.checkSignatures(uid, Process.myUid()) == PackageManager.SIGNATURE_MATCH;
         if (!isStore) Log.w(TAG, "refused binder call from uid " + uid);
         return isStore;

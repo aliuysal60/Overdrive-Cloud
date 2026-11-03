@@ -2,6 +2,12 @@
 
 BYD Tang ve Sealion 7 (DiLink 5, 51.1.x) için hazırlanan OverDrive sürümlerinin notları.
 
+## 57.0.8 — 2026-11-03
+
+- Play Mağazası: sol menüde Uygulama Mağazası'nın altında. İlk basışta OverDrive Play Mağaza'yı (Google Play istemcisi, Aurora Store çatalı) kendiliğinden indirip kurar; Google Play'deki uygulamalar, parçalı APK'lar dahil, onay ekranı çıkmadan OverDrive üzerinden kurulur, güncellenir ve kaldırılır
+- Uygulama Mağazası (F-Droid) olduğu gibi çalışmaya devam eder; iki mağaza da yeni sürümleri çıkınca açılmadan önce kendiliğinden güncellenir
+- Google Play Hizmetleri gerektiren uygulamalar (ör. resmî YouTube), ünitede bu hizmetler yoksa kurulsa da çalışmayabilir
+
 ## 57.0.7 — 2026-11-02
 
 - Uygulama Mağazası düzeltmesi: mağaza ve mağazadan kurulan uygulamalar artık `adb install` gibi doğrudan paket yöneticisine aktarılarak kuruluyor; 57.0.6'da araç dosya aktarımını reddettiği için kurulum yapılamıyordu

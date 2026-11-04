@@ -254,11 +254,11 @@
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
                                 <span data-i18n="dashboard.cmd_lock">Lock</span>
                             </button>
-                            <button class="dash-command" type="button" onclick="BYD.dashboard.command(this, '/api/vehicle/unlock')">
+                            <button class="dash-command" type="button" data-model-cmd="unlock" onclick="BYD.dashboard.command(this, '/api/vehicle/unlock')">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>
                                 <span data-i18n="dashboard.cmd_unlock">Unlock</span>
                             </button>
-                            <button class="dash-command" type="button" onclick="BYD.dashboard.command(this, '/api/vehicle/flash')">
+                            <button class="dash-command" type="button" data-model-cmd="flash" onclick="BYD.dashboard.command(this, '/api/vehicle/flash')">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h8l-1 8 11-13h-8l1-7z"/></svg>
                                 <span data-i18n="dashboard.cmd_flash">Flash</span>
                             </button>
@@ -266,7 +266,7 @@
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M11 8v3l2 2"/></svg>
                                 <span data-i18n="dashboard.cmd_find">Find</span>
                             </button>
-                            <button class="dash-command" type="button" onclick="BYD.dashboard.command(this, '/api/vehicle/trunk', {action:'open'})">
+                            <button class="dash-command" type="button" data-model-cmd="trunk_open" onclick="BYD.dashboard.command(this, '/api/vehicle/trunk', {action:'open'})">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z"/><polyline points="12 11 12 6"/><polyline points="9 8 12 5 15 8"/></svg>
                                 <span data-i18n="dashboard.cmd_trunk_open">Open trunk</span>
                             </button>
@@ -1552,6 +1552,8 @@
             cursor: pointer;
         }
         [dir="rtl"] .dash-command { text-align: right; }
+        /* A command the selected model can't carry out (Sealion 7 / Tang: unlock, flash, open trunk). */
+        .dash-command:disabled { opacity: .38; cursor: not-allowed; pointer-events: none; }
 
         .dash-command svg {
             box-sizing: border-box;
@@ -2965,7 +2967,7 @@
                     || (days + 'd ago');
             },
             command: function(btn, url, payload) {
-                if (!btn || btn.classList.contains('pending')) return;
+                if (!btn || btn.disabled || btn.classList.contains('pending')) return;
                 btn.classList.add('pending');
                 fetch(url, {
                     method: 'POST',
@@ -3035,8 +3037,21 @@
                 }).then(function(data) {
                     var grid = document.getElementById('dashPowerCommands');
                     if (grid) grid.style.display = data && data.localRemoteKey === true ? '' : 'none';
+                    BYD.dashboard.applyUnsupportedCommands(data && data.unsupportedCommands);
                     BYD.dashboard.layoutPills();
                 }).catch(function() {});
+            },
+            // Commands the selected model can't carry out (cloud-status unsupportedCommands) stay
+            // visible but disabled, so the grid keeps its shape.
+            applyUnsupportedCommands: function(list) {
+                var off = Array.isArray(list) ? list : [];
+                var btns = document.querySelectorAll('[data-model-cmd]');
+                for (var i = 0; i < btns.length; i++) {
+                    var unsupported = off.indexOf(btns[i].getAttribute('data-model-cmd')) !== -1;
+                    btns[i].disabled = unsupported;
+                    if (unsupported) btns[i].setAttribute('aria-disabled', 'true');
+                    else btns[i].removeAttribute('aria-disabled');
+                }
             },
             // Power, your own buttons and the page shortcuts share one row of pills;
             // past one row the rest fold behind More (keeps the tile the mock's height).

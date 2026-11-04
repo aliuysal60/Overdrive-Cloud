@@ -1573,6 +1573,10 @@ public class VehicleControlApiHandler {
         // and whether the vehicle-power tiles can be offered at all.
         response.put("localRemoteKey", com.overdrive.app.byd.RemoteKeyControl.isAvailable(
                 com.overdrive.app.byd.BydDataCollector.getInstance().getRuntimeContext()));
+        // Commands the selected model cannot carry out (Sealion 7 / Tang: unlock, flash,
+        // trunk_open); every screen shows those buttons disabled.
+        response.put("unsupportedCommands", com.overdrive.app.byd.ModelCommandSupport.toJson(
+                com.overdrive.app.byd.ModelCommandSupport.current()));
         HttpResponse.sendJson(out, response.toString());
     }
 

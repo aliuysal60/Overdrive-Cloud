@@ -34,6 +34,8 @@ class GlassControlsView(context: Context, env: GlassEnv, ticker: GlassTicker) : 
         val windows: Windows? = null,
         /** The driver door alone: decides the lock key's action, never its whole-car caption. */
         val driverLocked: Boolean? = null,
+        /** Commands the selected model can't carry out (Sealion 7 / Tang: unlock, boot, flash): their keys dim and ignore taps. */
+        val unsupported: Set<Command> = emptySet(),
     )
 
     /** Sends a command; the host calls back on the main thread with whether the car accepted it. */
@@ -163,7 +165,7 @@ class GlassControlsView(context: Context, env: GlassEnv, ticker: GlassTicker) : 
                 if (!parked || stale) return false
                 downTarget = hit(x, y)
                 if (downTarget < 0) return false
-                if (downTarget < 4) press(downTarget)
+                if (downTarget < 4 && !keyDisabled(downTarget)) press(downTarget)
                 return true
             }
             MotionEvent.ACTION_UP -> {
@@ -200,7 +202,16 @@ class GlassControlsView(context: Context, env: GlassEnv, ticker: GlassTicker) : 
         requestFrames()
     }
 
+    /** Key [i]'s next command is one the model can't carry out; the lock key only while it would unlock. */
+    private fun keyDisabled(i: Int): Boolean = when (i) {
+        0 -> (state.locked ?: state.driverLocked) == true && Command.UNLOCK in state.unsupported
+        2 -> Command.BOOT in state.unsupported
+        3 -> Command.FLASH in state.unsupported
+        else -> false
+    }
+
     private fun tap(t: Int) {
+        if (t < 4 && keyDisabled(t)) return
         val send = onCommand
         if (t >= 4) {
             if (pendingSeg >= 0) return
@@ -362,7 +373,7 @@ class GlassControlsView(context: Context, env: GlassEnv, ticker: GlassTicker) : 
     private fun drawKey(c: Canvas, t: GlassTheme, i: Int, rotor: Boolean) {
         val x = keyX(i); val cx = x + KS / 2f
         val night = t.night
-        val dim = !parked
+        val dim = !parked || keyDisabled(i)
         if (dim) c.saveLayerAlpha(null, 107)
         val on = when (i) { 0 -> state.locked == true; 1 -> state.climate == true; 2 -> state.boot == true; else -> false }
         val haloA = if (i == 3) 0.8f * flashS.value else if (on && parked) 0.55f else 0f
@@ -626,6 +637,11 @@ class GlassControlsView(context: Context, env: GlassEnv, ticker: GlassTicker) : 
         private val SEG_LABELS = arrayOf("Close", "Vent", "Open")
         private val BOOT_WHEELS = floatArrayOf(8f, 21f)
         private val CAR_WHEELS = floatArrayOf(-0.3f, 0.3f)
+
+        /** The keys behind ModelCommandSupport's command names (`unlock`, `trunk_open`, `flash`). */
+        fun unsupportedKeys(names: Collection<String>): Set<Command> = names.mapNotNull {
+            when (it) { "unlock" -> Command.UNLOCK; "trunk_open" -> Command.BOOT; "flash" -> Command.FLASH; else -> null }
+        }.toSet()
 
         private fun keyX(i: Int) = X0 + i * (KS + KGAP)
         private fun keyCx(i: Int) = keyX(i) + KS / 2f

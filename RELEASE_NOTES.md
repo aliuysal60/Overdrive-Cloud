@@ -2,6 +2,10 @@
 
 BYD Tang ve Sealion 7 (DiLink 5, 51.1.x) için hazırlanan OverDrive sürümlerinin notları.
 
+## 57.0.11 — 2026-11-04
+
+- Sealion 7 / Tang: araç modeli olarak Sealion 7 ya da Tang seçiliyse Kilidi aç, Far yak (selektör) ve Bagajı aç düğmeleri pasif görünür; bu araçlar bu komutları uygulamıyor. Kilitle ve Bagajı kapat çalışmaya devam eder. Ana paneldeki Hızlı kontroller, Araç kontrol sayfası, Canlı görüntüdeki Far düğmesi ve araç ekranındaki kısayol paneli (araç kilitliyken kilit anahtarı, Bagaj ve Far) için geçerli; telefondan açılan arayüz de aynıdır
+
 ## 57.0.10 — 2026-11-03
 
 - OverDrive Bulut: araç kapatıldıktan sonra (uyanık tut açıkken) telefonda "çevrimdışı" görünme sorunu düzeltildi. Araç kapanınca tünel, sunucu adresini çözemediği için yeniden bağlanamıyordu; artık adres çözümü araç açık da kapalı da olsa çalışıyor

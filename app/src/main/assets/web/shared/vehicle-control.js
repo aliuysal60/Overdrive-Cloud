@@ -3502,6 +3502,9 @@ var VC = {
         // de-duplicate via a 500ms guard so only one fire per real interaction.
         var lastFire = 0;
         function fire(e) {
+            // a disabled tile (e.g. a command the selected model can't carry out) never fires;
+            // touchend still reaches disabled buttons on some WebViews
+            if (el.disabled) return;
             var now = Date.now();
             if (now - lastFire < 500) return;
             lastFire = now;
@@ -3872,6 +3875,7 @@ var VC = {
             self.vehicleState.cloudConfigured = !!(data.configured && data.verified);
             self.vehicleState.localRemoteKey = data.localRemoteKey === true;
             self.updateLocalKeyControls();
+            self.updateModelCommandControls(data.unsupportedCommands);
             self.vehicleState.cloudState = self.vehicleState.cloudConfigured
                 ? 'connected'
                 : 'not_configured';
@@ -4043,6 +4047,24 @@ var VC = {
 
     // Vehicle power is offered only once the daemon confirms the local rail exists, so a
     // visible tile always has a path to the car.
+    /**
+     * Commands the selected model can't carry out (cloud-status unsupportedCommands; Sealion 7 /
+     * Tang: unlock, flash, trunk_open) stay visible but disabled. Lock and Close trunk still work.
+     */
+    updateModelCommandControls: function(list) {
+        var off = Array.isArray(list) ? list : [];
+        var tiles = { unlock: 'btnUnlock', flash: 'btnFlash', trunk_open: 'btnTrunkOpen' };
+        for (var cmd in tiles) {
+            if (!Object.prototype.hasOwnProperty.call(tiles, cmd)) continue;
+            var el = document.getElementById(tiles[cmd]);
+            if (!el) continue;
+            var unsupported = off.indexOf(cmd) !== -1;
+            el.disabled = unsupported;
+            if (unsupported) el.setAttribute('aria-disabled', 'true');
+            else el.removeAttribute('aria-disabled');
+        }
+    },
+
     updateLocalKeyControls: function() {
         var show = this.vehicleState.localRemoteKey === true;
         var ids = ['btnPowerOn', 'btnPowerOff'];

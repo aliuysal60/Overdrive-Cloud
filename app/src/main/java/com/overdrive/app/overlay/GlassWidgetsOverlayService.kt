@@ -1840,17 +1840,19 @@ class GlassWidgetsOverlayService : Service() {
     // The full vehicle-state call is heavy on core: at start, once a minute while parked, and after commands.
     private fun refreshVehicleState() {
         lastVehicleState = SystemClock.elapsedRealtime()
+        // re-read with the state, so a model picked in Settings reaches the keys within a minute
+        val unsupported = GlassControlsView.unsupportedKeys(com.overdrive.app.byd.ModelCommandSupport.current())
         val (code, text) = http("GET", "/api/vehicle/state", "")
-        if (code != 200) return
-        val v = try { JSONObject(text).takeIf { !GlassWidgetsFeed.failed(it) }?.let { GlassWidgetsFeed.vehicle(it) } } catch (_: Throwable) { null } ?: return
+        val v = if (code != 200) null else try { JSONObject(text).takeIf { !GlassWidgetsFeed.failed(it) }?.let { GlassWidgetsFeed.vehicle(it) } } catch (_: Throwable) { null }
         main.post {
             // a reading taken while a command is still settling (glass mid-travel) doesn't undo it
             val now = SystemClock.elapsedRealtime()
-            controls = controls.copy(
+            controls = if (v == null) controls.copy(unsupported = unsupported) else controls.copy(
                 locked = if (now > lockHoldUntil) v.locked ?: controls.locked else controls.locked,
                 climate = if (now > climateHoldUntil) v.climate ?: controls.climate else controls.climate,
                 cabinC = v.cabinC ?: controls.cabinC,
                 windows = if (now > windowsHoldUntil) v.windows ?: controls.windows else controls.windows,
+                unsupported = unsupported,
             )
             surface?.widget<GlassControlsView>("controls")?.bind(controls, true)
         }

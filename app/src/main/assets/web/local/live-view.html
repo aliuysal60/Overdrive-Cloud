@@ -2404,7 +2404,7 @@
             const isHorn = kind === 'horn';
             const btnId = isHorn ? 'deterrentHornBtn' : 'deterrentFlashBtn';
             const btn = document.getElementById(btnId);
-            if (btn && btn.classList.contains('pending')) return;
+            if (btn && (btn.disabled || btn.classList.contains('pending'))) return;
 
             const confirmed = await BYD.utils.confirmDialog({
                 title: isHorn ? BYD.i18n.t('liveview.deterrent_horn_confirm_title')
@@ -2545,6 +2545,13 @@
                 const cloudReady = !!(data && data.configured && data.verified);
                 const controls = document.getElementById('deterrentControls');
                 if (controls && cloudReady) controls.style.display = '';
+                // Sealion 7 / Tang can't flash the lights: keep the button, disabled
+                const flashBtn = document.getElementById('deterrentFlashBtn');
+                const off = Array.isArray(data && data.unsupportedCommands) ? data.unsupportedCommands : [];
+                if (flashBtn && off.indexOf('flash') !== -1) {
+                    flashBtn.disabled = true;
+                    flashBtn.setAttribute('aria-disabled', 'true');
+                }
             } catch (e) {
                 // Cloud status unreachable — leave the cluster hidden (its
                 // inline default). Deterrent controls are opt-in on cloud

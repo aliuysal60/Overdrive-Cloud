@@ -2,6 +2,10 @@
 
 BYD Tang ve Sealion 7 (DiLink 5, 51.1.x) için hazırlanan OverDrive sürümlerinin notları.
 
+## 57.0.12 — 2026-11-05
+
+- Mağaza kurulumları (Play Mağazası ve Uygulama Mağazası): Chrome, Angry Birds 2 gibi büyük uygulamaların "kuruluyor"da takılı kalması düzeltildi. APK'lar ADB bağlantısı üzerinden akıtılırken araçta zaman zaman yarıda durup bir daha devam etmiyordu; artık Android dosyaları doğrudan diskten okuyor, aktarım saniyeler sürüyor. Yarım kalan kurulum geride oturum bırakmıyor
+
 ## 57.0.11 — 2026-11-04
 
 - Sealion 7 / Tang: araç modeli olarak Sealion 7 ya da Tang seçiliyse Kilidi aç, Far yak (selektör) ve Bagajı aç düğmeleri pasif görünür; bu araçlar bu komutları uygulamıyor. Kilitle ve Bagajı kapat çalışmaya devam eder. Ana paneldeki Hızlı kontroller, Araç kontrol sayfası, Canlı görüntüdeki Far düğmesi ve araç ekranındaki kısayol paneli (araç kilitliyken kilit anahtarı, Bagaj ve Far) için geçerli; telefondan açılan arayüz de aynıdır

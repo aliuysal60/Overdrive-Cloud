@@ -175,6 +175,37 @@ public class StoreInstallerTest {
     }
 
     @Test
+    public void pathInstallCommandsNameTheSessionAndTheStagedFile() throws IOException {
+        File apk = tmp.newFile("install-1-0.apk");
+        java.nio.file.Files.write(apk.toPath(), new byte[1234]);
+        assertEquals("cmd package install-create -r -d -S 5000",
+                StoreInstaller.createCommand(new String[] {"-r", "-d"}, 5000L));
+        assertEquals("cmd package install-write -S 1234 99 2.apk " + apk.getAbsolutePath(),
+                StoreInstaller.writeCommand("99", 2, apk));
+    }
+
+    @Test
+    public void sessionIdComesOnlyFromASuccessfulCreate() {
+        assertEquals("1708149265",
+                StoreInstaller.parseSessionId("Success: created install session [1708149265]\n"));
+        assertNull(StoreInstaller.parseSessionId("Error: [123] something"));
+        assertNull(StoreInstaller.parseSessionId("Success: no id"));
+        assertNull(StoreInstaller.parseSessionId(null));
+    }
+
+    @Test
+    public void storeInstallsReadStagedFilesInsteadOfStreamingThroughAdbd() throws IOException {
+        // BYD's adbd stalls long streamed install-writes for good; the package manager must read
+        // the staged APKs from the shell-readable external files directory instead.
+        String installer = readRepositoryFile(
+                "app/src/main/java/com/overdrive/app/store/StoreInstaller.java");
+        assertTrue(installer.contains("context.getExternalFilesDir(STAGING_DIR)"));
+        assertTrue(installer.contains("if (shellCanRead(apks)) return pmInstallFromPaths(apks);"));
+        assertTrue(installer.contains("\"cmd package install-commit \""));
+        assertTrue(installer.contains("\"cmd package install-abandon \""));
+    }
+
+    @Test
     public void pmSilenceOrTransportErrorsAreFailures() {
         assertEquals("pm gave no answer", StoreInstaller.pmOutcome("").message);
         assertEquals("pm gave no answer", StoreInstaller.pmOutcome(null).message);

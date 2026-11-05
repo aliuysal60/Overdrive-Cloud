@@ -38,6 +38,13 @@ import java.util.regex.Pattern;
  * ({@link AppUpdater#tryBeginInstall()}). Nothing is staged in /data/local/tmp: BYD's adbd
  * refuses file pushes there.
  *
+ * <p>The APKs are staged in OverDrive's external files directory, which the shell can read, and
+ * the package manager reads them from there ({@code install-create} / {@code install-write <path>}
+ * / {@code install-commit}): only short commands cross ADB. Streaming the bytes through adbd
+ * stalled for good on BYD head units now and then (Chrome stopped at 94 %, Angry Birds 2 at
+ * 16 %, each {@code install-write} waiting forever for data) and left the session and the shell
+ * process behind. Without external storage the streamed install remains as the fallback.
+ *
  * <p>OverDrive itself, the store, the launcher companion and system packages are never
  * installed over or uninstalled from the store's requests; OverDrive installs and updates
  * the store itself through {@link #installStore}. Requests run one at a time on a private
@@ -71,6 +78,12 @@ public final class StoreInstaller {
     private static final long PM_DEADLINE_MS = 300_000L;
     // A split set (Play apps) can be several hundred MB in one session.
     private static final long PM_MULTIPLE_DEADLINE_MS = 600_000L;
+    // install-create / install-abandon answer at once; install-write copies a local file.
+    private static final long PM_SESSION_DEADLINE_MS = 60_000L;
+    private static final long PM_WRITE_DEADLINE_MS = 180_000L;
+    /** Where the shell reads staged APKs from: the app's external files directory. */
+    private static final String STAGING_DIR = "store_install";
+    private static final Pattern SESSION_ID = Pattern.compile("\\[(\\d+)\\]");
     // The executor guarantees a callback by its deadline; the margin only covers delivery.
     private static final long WAIT_MARGIN_MS = 20_000L;
 
@@ -159,11 +172,15 @@ public final class StoreInstaller {
             if (!isStorePackage(storePackage)) return Outcome.fail(storePackage + " is not a store");
             String refusal = refuseArchivePackages(storePackage, Collections.singletonList(apk));
             if (refusal != null) return Outcome.fail(refusal);
+            File staged = stageForShell(apk);
             if (!AppUpdater.tryBeginInstall()) return Outcome.fail("another install is in progress");
             try {
-                return pmInstall(Collections.singletonList(apk));
+                return pmInstall(Collections.singletonList(staged != null ? staged : apk));
             } finally {
                 AppUpdater.endInstall();
+                if (staged != null && staged.exists() && !staged.delete()) {
+                    Log.w(TAG, "could not delete " + staged);
+                }
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -171,6 +188,41 @@ public final class StoreInstaller {
         } finally {
             if (apk.exists() && !apk.delete()) Log.w(TAG, "could not delete " + apk);
         }
+    }
+
+    /**
+     * A copy of {@code apk} in the shell-readable staging directory, or null when there is none
+     * (or the copy fails) and the install has to stream {@code apk} itself.
+     */
+    private File stageForShell(File apk) {
+        File dir = stagingDir();
+        if (dir == null) return null;
+        File staged = new File(dir, "store-" + System.nanoTime() + ".apk");
+        try (InputStream in = new java.io.FileInputStream(apk)) {
+            copyAndHash(in, staged, MAX_APK_BYTES);
+            return staged;
+        } catch (IOException e) {
+            Log.w(TAG, "could not stage " + apk + ": " + e.getMessage());
+            if (staged.exists() && !staged.delete()) Log.w(TAG, "could not delete " + staged);
+            return null;
+        }
+    }
+
+    /**
+     * OverDrive's external files directory for staged APKs, emptied of anything an earlier,
+     * interrupted install left behind; null without external storage. Requests run one at a
+     * time, so nothing in it belongs to a running install.
+     */
+    private File stagingDir() {
+        File dir = context.getExternalFilesDir(STAGING_DIR);
+        if (dir == null || (!dir.isDirectory() && !dir.mkdirs())) return null;
+        File[] stale = dir.listFiles();
+        if (stale != null) {
+            for (File f : stale) {
+                if (f.isFile() && !f.delete()) Log.w(TAG, "could not delete " + f);
+            }
+        }
+        return dir;
     }
 
     // ---------------------------------------------------------------- request checks
@@ -268,8 +320,11 @@ public final class StoreInstaller {
             if (refusal == null) refusal = refuseInstalledPackage(packageName);
             if (refusal != null) return Outcome.fail(refusal);
 
-            File dir = new File(context.getCacheDir(), "store_install");
-            if (!dir.isDirectory() && !dir.mkdirs()) return Outcome.fail("cache unavailable");
+            File dir = stagingDir();
+            if (dir == null) {
+                dir = new File(context.getCacheDir(), STAGING_DIR);
+                if (!dir.isDirectory() && !dir.mkdirs()) return Outcome.fail("cache unavailable");
+            }
             long stamp = System.nanoTime();
             long total = 0;
             for (int i = 0; i < apks.length; i++) {
@@ -315,6 +370,7 @@ public final class StoreInstaller {
      * {@code adb install -r -d}, a split set like {@code adb install-multiple -r -d}.
      */
     private Outcome pmInstall(List<File> apks) throws InterruptedException {
+        if (shellCanRead(apks)) return pmInstallFromPaths(apks);
         ShellOutcome installed;
         if (apks.size() == 1) {
             installed = await(cb -> adb().installBulk(
@@ -326,6 +382,65 @@ public final class StoreInstaller {
                     PM_MULTIPLE_DEADLINE_MS + WAIT_MARGIN_MS);
         }
         return installed.ok ? Outcome.ok() : pmOutcome(installed.text);
+    }
+
+    /** Whether every APK lies in the shell-readable staging directory. */
+    private boolean shellCanRead(List<File> apks) {
+        File dir = context.getExternalFilesDir(STAGING_DIR);
+        if (dir == null) return false;
+        String prefix = dir.getAbsolutePath() + File.separator;
+        for (File apk : apks) {
+            if (!apk.getAbsolutePath().startsWith(prefix)) return false;
+        }
+        return true;
+    }
+
+    /**
+     * One install session the package manager fills from the staged files' paths:
+     * {@code install-create}, an {@code install-write} per APK, {@code install-commit}. Any
+     * failure before the commit abandons the session, so no half-written session is left behind.
+     */
+    private Outcome pmInstallFromPaths(List<File> apks) throws InterruptedException {
+        long total = 0;
+        for (File apk : apks) total += apk.length();
+        ShellOutcome created = shell(createCommand(INSTALL_OPTIONS, total), PM_SESSION_DEADLINE_MS);
+        String session = parseSessionId(created.text);
+        if (!created.ok || session == null) return pmOutcome(created.text);
+        boolean committed = false;
+        try {
+            for (int i = 0; i < apks.size(); i++) {
+                ShellOutcome written = shell(writeCommand(session, i, apks.get(i)),
+                        PM_WRITE_DEADLINE_MS);
+                if (!written.ok || !written.text.contains("Success")) return pmOutcome(written.text);
+            }
+            committed = true;
+            return pmOutcome(shell("cmd package install-commit " + session,
+                    PM_MULTIPLE_DEADLINE_MS).text);
+        } finally {
+            // A commit, failed or not, ends the session itself.
+            if (!committed) shell("cmd package install-abandon " + session, PM_SESSION_DEADLINE_MS);
+        }
+    }
+
+    static String createCommand(String[] options, long totalBytes) {
+        return "cmd package install-create " + String.join(" ", options) + " -S " + totalBytes;
+    }
+
+    static String writeCommand(String session, int index, File apk) {
+        return "cmd package install-write -S " + apk.length() + " " + session + " " + index
+                + ".apk " + apk.getAbsolutePath();
+    }
+
+    /** The session id in install-create's "Success: created install session [N]", or null. */
+    static String parseSessionId(String output) {
+        if (output == null || !output.contains("Success")) return null;
+        java.util.regex.Matcher m = SESSION_ID.matcher(output);
+        return m.find() ? m.group(1) : null;
+    }
+
+    private ShellOutcome shell(String command, long deadlineMs) throws InterruptedException {
+        return await(cb -> adb().executeBulk(command + " 2>&1", deadlineMs, cb),
+                deadlineMs + WAIT_MARGIN_MS);
     }
 
     // ---------------------------------------------------------------- uninstall

@@ -168,9 +168,9 @@
     <string name="dashboard_qr_waiting">Tünel bekleniyor…</string>
     <string name="dashboard_daemons_running_default">0/5 çalışıyor</string>
     <string name="dashboard_device_id_loading">…</string>
-    <string name="dashboard_access_code">Erişim Kodu</string>
+    <string name="dashboard_access_code">Web giriş kodu</string>
     <string name="dashboard_token_masked">••••••••</string>
-    <string name="dashboard_regenerate_token">Token\'ı yeniden oluştur</string>
+    <string name="dashboard_regenerate_token">Giriş kodunu yenile</string>
     <!-- fragment_recording_controls -->
     <!-- dialog_setup_guide -->
     <string name="setup_guide_title">Başlarken</string>
@@ -478,7 +478,7 @@
     <!-- Format helpers -->
     <!-- Dashboard -->
     <string name="toast_access_code_copied">Giriş kodu kopyalandı</string>
-    <string name="dialog_regenerate_token_title">Token\'ı yeniden oluştur</string>
+    <string name="dialog_regenerate_token_title">Giriş kodunu yenile</string>
     <string name="dialog_regenerate_token_message">Bu işlem mevcut token\'ı geçersiz kılar. Tüm etkin oturumlar kapatılır. Devam edilsin mi?</string>
     <string name="toast_token_regenerated_logged_out">Yeni token oluşturuldu. Tüm oturumlar kapatıldı.</string>
     <string name="toast_token_regenerated_restart">Token yeniden oluşturuldu. Uygulanması için daemon\'un yeniden başlatılması gerekebilir.</string>
@@ -775,7 +775,7 @@
     <!-- Metric tiles -->
     <string name="dashboard_metric_recordings">Bugünkü kayıtlar</string>
     <string name="dashboard_metric_storage">Kullanılan depolama</string>
-    <string name="dashboard_metric_tunnel">Uzaktan erişim</string>
+    <string name="dashboard_metric_tunnel">Uzaktan erişim (Telefon Kaydı)</string>
     <string name="dashboard_metric_services">Arka plan hizmetleri</string>
     <string name="dashboard_metric_value_pending">—</string>
     <string name="dashboard_metric_vehicle">Araç</string>

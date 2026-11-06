@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- strings_startup.xml — the "OverDrive is getting ready" strip shown until the start-up services run -->
+<resources>
+    <string name="startup_banner_title">OverDrive is getting ready (%1$d/%2$d)</string>
+    <string name="startup_banner_title_slow">Some services have not started (%1$d/%2$d)</string>
+    <string name="startup_banner_preparing">The car system is settling; the services start in about a minute. Please wait and keep the app open.</string>
+    <string name="startup_banner_starting_list">Starting the services, please wait: %1$s</string>
+    <string name="startup_banner_slow">Still not running: %1$s. Check them on the Services screen.</string>
+    <string name="startup_banner_starting">starting…</string>
+    <string name="startup_banner_waiting">waiting</string>
+    <string name="startup_banner_retrying">retrying</string>
+    <string name="startup_banner_title_ready">OverDrive is ready ✓ (%1$d/%2$d)</string>
+    <string name="startup_banner_ready">All services are running. This note closes by itself.</string>
+</resources>

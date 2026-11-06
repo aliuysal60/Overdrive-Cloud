@@ -29,4 +29,8 @@
     <string name="cloud_account_removed">Erişim kaldırıldı</string>
     <string name="cloud_code_fetching">Yeni kod alınıyor…</string>
     <string name="cloud_code_validity">Kod 15 dakika geçerli ve tek kullanımlık. Başka bir hesap eklemek için bu pencereyi yeniden açın.</string>
+    <string name="dashboard_pairing_code_label">Eşleştirme kodu</string>
+    <string name="dashboard_pairing_code_note">15 dakika geçerli, tek kullanımlık. Telefonda Araçlarım\'da QR\'ı okutun ya da bu kodu yazın.</string>
+    <string name="dashboard_pairing_fetching">Yeni eşleştirme kodu alınıyor…</string>
+    <string name="dashboard_access_code_hint">Aracın web arayüzünü OverDrive Bulut olmadan (yerel ağ, Cloudflare, Zrok, Tailscale) açarken sorulur. Telefona araç eklemek için kullanılmaz.</string>
 </resources>

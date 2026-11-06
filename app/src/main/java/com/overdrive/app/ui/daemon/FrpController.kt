@@ -32,6 +32,14 @@ class FrpController(
     private val _cloudPairing = MutableLiveData<CloudPairing?>()
     val cloudPairing: LiveData<CloudPairing?> = _cloudPairing
 
+    /**
+     * A pairing code the gateway just issued (from POST /api/frp/cloud/pair-code's own reply), shown
+     * at once: the summary poll only runs while the tunnel reports "connected". Main thread only.
+     */
+    fun showPairing(pairing: CloudPairing) {
+        _cloudPairing.value = pairing
+    }
+
     private val frpLauncher by lazy {
         FrpLauncher(context, AdbShellExecutor(context), LogManager.getInstance())
     }

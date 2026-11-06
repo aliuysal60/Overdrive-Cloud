@@ -109,6 +109,8 @@ class DaemonStartupManager(
 
         fun markUserStopped(type: DaemonType) {
             userStoppedDaemons.add(type)
+            // a service the user stops is no longer something to wait for
+            StartupProgress.skip(type)
         }
 
         fun clearUserStopped(type: DaemonType) {
@@ -437,6 +439,8 @@ class DaemonStartupManager(
 
     fun initializeOnAppLaunch() {
         log.info(TAG, "=== Initializing daemon startup on app launch ===")
+        // the start-up banner waits from here until every service this pass brings up runs
+        StartupProgress.begin()
         log.info(TAG, "Waiting 45 seconds before starting daemons (system stabilization)...")
 
         // Hand off from any pre-existing bootManager (which was launched
@@ -708,11 +712,13 @@ class DaemonStartupManager(
                     val out = message.trim()
                     when {
                         out.contains("PARKED_BLOCKED") -> {
+                            StartupProgress.skip(type)
                             noteParkObserved()
                             log.info(TAG, "Auto-start: Vehicle-ON-only parked marker present — " +
                                 "not starting ${type.displayName} (stay asleep)")
                         }
                         out.contains("STOPPED") -> {
+                            StartupProgress.skip(type)
                             log.info(TAG, "Auto-start: ${type.displayName} is manually stopped — skipping")
                             daemonsViewModel?.noteExternalStop(type, noteGeneration)
                         }
@@ -894,6 +900,8 @@ class DaemonStartupManager(
                         }
                     }
                 }
+            } else {
+                StartupProgress.skip(DaemonType.FRP_TUNNEL)
             }
         }
     }
@@ -1058,7 +1066,10 @@ class DaemonStartupManager(
 
     private fun ifFrpConfigured(action: () -> Unit) {
         FrpLauncher(context, adbLauncher.adbShellExecutor, log).hasConfig { configured ->
-            if (configured) action() else log.debug(TAG, "FRP tunnel has no settings, not starting")
+            if (configured) action() else {
+                StartupProgress.skip(DaemonType.FRP_TUNNEL)
+                log.debug(TAG, "FRP tunnel has no settings, not starting")
+            }
         }
     }
 

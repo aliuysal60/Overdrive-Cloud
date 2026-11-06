@@ -333,6 +333,13 @@ open class MainActivity : AppCompatActivity() {
         // Initialize daemon startup manager
         daemonStartupManager = DaemonStartupManager(this, daemonsViewModel)
         daemonsViewModel.setStartupManager(daemonStartupManager)
+        com.overdrive.app.ui.daemon.StartupBanner(
+            findViewById(R.id.startupBanner),
+            findViewById(R.id.startupBannerProgress),
+            findViewById(R.id.startupBannerTitle),
+            findViewById(R.id.startupBannerText),
+            findViewById(R.id.startupBannerClose),
+        ).bind(this, daemonsViewModel)
         
         // Setup ADB auth callback to re-initialize when auth is granted
         if (!remoteDevSession) setupAdbAuthCallback()

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- strings_startup.xml — başlangıç servisleri çalışana kadar görünen "OverDrive hazırlanıyor" bandı -->
+<resources>
+    <string name="startup_banner_title">OverDrive hazırlanıyor (%1$d/%2$d)</string>
+    <string name="startup_banner_title_slow">Bazı servisler başlamadı (%1$d/%2$d)</string>
+    <string name="startup_banner_preparing">Araç sistemi hazırlanıyor; servisler yaklaşık bir dakika içinde başlayacak. Lütfen bekleyin, uygulamayı kapatmayın.</string>
+    <string name="startup_banner_starting_list">Servisler başlatılıyor, lütfen bekleyin: %1$s</string>
+    <string name="startup_banner_slow">Hâlâ çalışmayan: %1$s. Servisler ekranından kontrol edebilirsiniz.</string>
+    <string name="startup_banner_starting">başlatılıyor…</string>
+    <string name="startup_banner_waiting">bekliyor</string>
+    <string name="startup_banner_retrying">yeniden deneniyor</string>
+    <string name="startup_banner_title_ready">OverDrive hazır ✓ (%1$d/%2$d)</string>
+    <string name="startup_banner_ready">Tüm servisler çalışıyor. Bu bilgi birazdan kendiliğinden kapanacak.</string>
+</resources>

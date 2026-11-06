@@ -29,4 +29,8 @@
     <string name="cloud_account_removed">Access removed</string>
     <string name="cloud_code_fetching">Getting a new code…</string>
     <string name="cloud_code_validity">The code is valid for 15 minutes and works once. To add another account, open this window again.</string>
+    <string name="dashboard_pairing_code_label">Pairing code</string>
+    <string name="dashboard_pairing_code_note">Valid for 15 minutes, works once. On the phone, scan the QR in My cars or type this code.</string>
+    <string name="dashboard_pairing_fetching">Getting a new pairing code…</string>
+    <string name="dashboard_access_code_hint">Asked when you open the car\'s web interface without OverDrive Cloud (local network, Cloudflare, Zrok, Tailscale). Not used to add the car to a phone.</string>
 </resources>

@@ -2,6 +2,12 @@
 
 BYD Tang ve Sealion 7 (DiLink 5, 51.1.x) için hazırlanan OverDrive sürümlerinin notları.
 
+## 57.0.17 — 2026-11-06
+
+- Telefon kaydı (OverDrive Bulut eşleştirmesi) düzeltildi: kontrol paneli artık süresi dolmuş kodu göstermiyor. Araç açılıp bulut bağlanır bağlanmaz bölüm açıldığında yeni kod istenmiyor ve eski kod okutulunca "Bu koda ait araç bulunamadı" hatası alınıyordu; şimdi QR her görünür olduğunda yeni kod alınır, gelene kadar "Yeni eşleştirme kodu alınıyor…" yazar, açık kaldıkça 10 dakikada bir yenilenir
+- Kontrol panelinde kod, "Eşleştirme kodu" başlığıyla büyük ve "15 dakika geçerli, tek kullanımlık" notuyla görünür; "Erişim Kodu" artık "Web giriş kodu" (OverDrive Bulut dışından web arayüzüne girişte sorulur, telefona araç eklemek için değil), düğmesi "Giriş kodunu yenile"; bölüm başlığı "Uzaktan erişim (Telefon Kaydı)"
+- Açılışta "OverDrive hazırlanıyor" bandı: araç ya da uygulama açıldığında Kamera, Gözetim, ACC Gözetim ve OverDrive Bulut servisleri çalışana kadar her ekranın üstünde ilerleme gösterilir; hepsi çalışınca "OverDrive hazır ✓" deyip 10 saniye sonra kapanır
+
 ## 57.0.16 — 2026-11-06
 
 - OverDrive Bulut: araç, Hakkında ekranındaki sistem bilgilerini (yazılım, DSP, MCU, Android sürümü, güvenlik yaması, ünite) de buluta bildirir; VIN gönderilmez

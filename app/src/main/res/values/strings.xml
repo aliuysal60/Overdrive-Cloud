@@ -291,9 +291,9 @@
     <string name="dashboard_qr_waiting">Waiting for tunnel…</string>
     <string name="dashboard_daemons_running_default">0/5 Running</string>
     <string name="dashboard_device_id_loading">…</string>
-    <string name="dashboard_access_code">Access Code</string>
+    <string name="dashboard_access_code">Web sign-in code</string>
     <string name="dashboard_token_masked">••••••••</string>
-    <string name="dashboard_regenerate_token">Regenerate Token</string>
+    <string name="dashboard_regenerate_token">Renew sign-in code</string>
 
     <!-- fragment_recording_controls -->
 
@@ -821,7 +821,7 @@
 
     <!-- Dashboard -->
     <string name="toast_access_code_copied">Access code copied</string>
-    <string name="dialog_regenerate_token_title">Regenerate Token</string>
+    <string name="dialog_regenerate_token_title">Renew sign-in code</string>
     <string name="dialog_regenerate_token_message">This will invalidate the current token. All active sessions will be logged out. Continue?</string>
     <string name="toast_token_regenerated_logged_out">New token generated. All sessions logged out.</string>
     <string name="toast_token_regenerated_restart">Token regenerated. Daemon may need restart to apply.</string>
@@ -1490,7 +1490,7 @@
     <!-- Metric tiles -->
     <string name="dashboard_metric_recordings">Today\'s recordings</string>
     <string name="dashboard_metric_storage">Storage used</string>
-    <string name="dashboard_metric_tunnel">Remote access</string>
+    <string name="dashboard_metric_tunnel">Remote access (phone pairing)</string>
     <string name="dashboard_metric_services">Background services</string>
     <string name="dashboard_metric_value_pending">—</string>
     <string name="dashboard_metric_vehicle">Vehicle</string>

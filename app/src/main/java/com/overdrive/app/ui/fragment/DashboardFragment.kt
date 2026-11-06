@@ -229,10 +229,14 @@ class DashboardFragment : Fragment() {
         refreshVehicleTile()
         rebuildInsightsAsync()
         loadAuthState()
+        // a code shown before the screen went away may have expired or been used meanwhile
+        requestFreshPairingCode()
     }
 
     override fun onPause() {
         dashboardResumed = false
+        mainHandler.removeCallbacks(pairingCodeTimer)
+        pairingCode = PairingCode.NEEDED
         mainHandler.removeCallbacks(statusRefreshRunnable)
         mainHandler.removeCallbacks(recordingStatsRefreshRunnable)
         mainHandler.removeCallbacks(vehicleTileRefreshRunnable)
@@ -383,7 +387,7 @@ class DashboardFragment : Fragment() {
                 !dashboardState.remoteExpanded,
             )
             renderRemoteExpansion()
-            if (dashboardState.remoteExpanded) refreshCloudPairingCode()
+            if (dashboardState.remoteExpanded) requestFreshPairingCode()
         }
         metricVehicle?.setOnClickListener { showVehicleCapacityDialog() }
 
@@ -1174,8 +1178,8 @@ class DashboardFragment : Fragment() {
                 val type = chip.tag as? DaemonType ?: return@setOnCheckedStateChangeListener
                 if (type != selectedTunnel) {
                     selectedTunnel = type
+                    if (type == DaemonType.FRP_TUNNEL) pairingCode = PairingCode.NEEDED
                     renderQr(qrUrlFor(type))
-                    if (type == DaemonType.FRP_TUNNEL) refreshCloudPairingCode()
                 }
             }
         }
@@ -1243,18 +1247,52 @@ class DashboardFragment : Fragment() {
         else -> type.localizedName(requireContext())
     }
 
+    /** Where the OverDrive Cloud pairing code under the QR stands. */
+    private enum class PairingCode { NEEDED, FETCHING, FAILED, FRESH }
+
     /**
-     * OverDrive Cloud pairing codes live 15 minutes and die on first use, so the stored one shown
-     * under the QR is usually dead: ask for a new one whenever the remote section comes into view.
-     * The fresh summary reaches the QR through the cloudPairing observer.
+     * OverDrive Cloud pairing codes live 15 minutes and die on first use, so the stored one is
+     * usually dead. It is never shown: each time the code comes into view (screen resumed, section
+     * opened, cloud tunnel picked) and every 10 minutes while it stays in view, a new one is
+     * fetched, and the QR waits for it.
      */
-    private fun refreshCloudPairingCode() {
+    private var pairingCode = PairingCode.NEEDED
+    private var pairingRequest = 0
+    private val pairingCodeTimer = Runnable { requestFreshPairingCode() }
+
+    private fun requestFreshPairingCode() {
+        pairingCode = PairingCode.NEEDED
+        rerenderQr()
+    }
+
+    private fun rerenderQr() {
+        if (!isAdded || view == null) return
+        hasRenderedQrForView = false
+        selectedTunnel?.let { renderQr(qrUrlFor(it)) }
+    }
+
+    private fun fetchPairingCode() {
         val frp = daemonsViewModel.frpController
-        if (frp.cloudPairing.value == null) return
+        val request = ++pairingRequest
+        pairingCode = PairingCode.FETCHING
+        mainHandler.removeCallbacks(pairingCodeTimer)
         Thread {
-            val ok = com.overdrive.app.ui.daemon.FrpDaemonApi
-                .request("POST", "/api/frp/cloud/pair-code", "{}")?.first in 200..299
-            if (ok) frp.refreshTunnelUrl()
+            val reply = com.overdrive.app.ui.daemon.FrpDaemonApi.request("POST", "/api/frp/cloud/pair-code", "{}")
+            val body = reply?.second?.takeIf { reply.first in 200..299 }
+            // the new code comes from this reply itself, never from the summary (that poll only runs
+            // while the tunnel reports "connected", so it may still hold the old, dead code)
+            val fresh = body?.let {
+                val code = it.optString("pairCode")
+                val url = it.optString("pairUrl")
+                if (code.isNotEmpty() && url.isNotEmpty()) com.overdrive.app.ui.daemon.FrpController.CloudPairing(code, url) else null
+            }
+            mainHandler.post {
+                if (request != pairingRequest || !isAdded) return@post
+                if (fresh != null) frp.showPairing(fresh)
+                pairingCode = if (fresh != null) PairingCode.FRESH else PairingCode.FAILED
+                rerenderQr()
+                if (fresh != null && isResumed) mainHandler.postDelayed(pairingCodeTimer, PAIRING_REFRESH_MS)
+            }
         }.start()
     }
 
@@ -1272,6 +1310,15 @@ class DashboardFragment : Fragment() {
             hasRenderedQrForView = false
             return
         }
+        val pairing = daemonsViewModel.frpController.cloudPairing.value?.takeIf { it.url == url }
+        if (pairing != null && pairingCode != PairingCode.FRESH) {
+            if (pairingCode == PairingCode.NEEDED) fetchPairingCode()
+            showPlaceholder(getString(
+                if (pairingCode == PairingCode.FAILED) R.string.cloud_rotate_failed else R.string.dashboard_pairing_fetching))
+            lastRenderedQrUrl = null
+            hasRenderedQrForView = false
+            return
+        }
         if (hasRenderedQrForView && url == lastRenderedQrUrl) return
         try {
             val qrBitmap = QrCodeGenerator.generate(url, 400)
@@ -1280,9 +1327,16 @@ class DashboardFragment : Fragment() {
                 qrContainer.visibility = View.VISIBLE
                 ivQrCode.visibility = View.VISIBLE
                 tvQrPlaceholder.visibility = View.GONE
-                // cloud pairing: show the code to type under the QR instead of the long link
-                val pairing = daemonsViewModel.frpController.cloudPairing.value?.takeIf { it.url == url }
-                tvUrl.text = pairing?.code ?: url
+                // cloud pairing: the code to type, clearly labelled, instead of the long link
+                if (pairing != null) {
+                    tvUrl.maxLines = 4
+                    tvUrl.ellipsize = null
+                    tvUrl.text = pairingCodeText(pairing.code)
+                } else {
+                    tvUrl.maxLines = 2
+                    tvUrl.ellipsize = android.text.TextUtils.TruncateAt.MIDDLE
+                    tvUrl.text = url
+                }
                 tvUrl.visibility = View.VISIBLE
                 lastRenderedQrUrl = url
                 hasRenderedQrForView = true
@@ -1294,13 +1348,27 @@ class DashboardFragment : Fragment() {
         }
     }
 
-    private fun showPlaceholder() {
+    private fun showPlaceholder(text: String? = null) {
         ivQrCode.setImageDrawable(null)
         ivQrCode.visibility = View.GONE
         qrContainer.visibility = View.GONE
         tvQrPlaceholder.visibility = View.VISIBLE
-        tvQrPlaceholder.text = getTunnelPlaceholderText()
+        tvQrPlaceholder.text = text ?: getTunnelPlaceholderText()
         tvUrl.visibility = View.GONE
+    }
+
+    /** "Pairing code" / XXXX-XXXX-XXXX-XXXX (large) / how long it lives and where to type it. */
+    private fun pairingCodeText(code: String): CharSequence {
+        val label = getString(R.string.dashboard_pairing_code_label)
+        val note = getString(R.string.dashboard_pairing_code_note)
+        val text = android.text.SpannableStringBuilder()
+            .append(label).append('\n')
+        val start = text.length
+        text.append(code)
+        text.setSpan(android.text.style.RelativeSizeSpan(1.45f), start, text.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        text.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), start, text.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        text.append('\n').append(note)
+        return text
     }
 
     private fun renderRemoteExpansion() {
@@ -2018,6 +2086,8 @@ class DashboardFragment : Fragment() {
     }
 
     companion object {
+        /** A shown pairing code is replaced well before its 15 minutes run out. */
+        private const val PAIRING_REFRESH_MS = 10 * 60 * 1000L
         private const val STATE_REMOTE_EXPANDED = "dashboard.remote_expanded"
         private const val STATE_AI_INSIGHT_EXPANDED =
             "dashboard.ai_insight_expanded"

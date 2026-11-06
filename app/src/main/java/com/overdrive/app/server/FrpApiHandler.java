@@ -1,7 +1,6 @@
 // FrpApiHandler.java — FRP tunnel settings API (daemon side; the token is write-only)
 package com.overdrive.app.server;
 
-import com.overdrive.app.frp.FrpConfig;
 import com.overdrive.app.frp.FrpStore;
 import com.overdrive.app.logging.DaemonLogger;
 
@@ -10,15 +9,13 @@ import org.json.JSONObject;
 import java.io.OutputStream;
 
 /**
- * Self-hosted FRP tunnel settings. Runs in the daemon process, which owns the config directory.
- * No response ever contains the token.
+ * OverDrive Cloud tunnel state and enrollment. Runs in the daemon process, which owns the config
+ * directory. No response ever contains the car's secret. (The self-hosted frps mode, with its
+ * POST/DELETE /api/frp/config, was removed.)
  *
  * Endpoints (JWT required, also over loopback — see HttpServer):
- * - GET    /api/frp         → {configured, summary, running, state}
- * - POST   /api/frp/config  → {"serverAddr", "serverPort", "token", "domain"}; an empty token keeps
- *                             the stored one
- * - DELETE /api/frp/config  → remove the stored settings
- * - POST   /api/frp/cloud/enroll    → leave own frps (if any) and enroll with OverDrive Cloud
+ * - GET    /api/frp         → {configured, mode, summary, running, state}
+ * - POST   /api/frp/cloud/enroll    → enroll with OverDrive Cloud now
  * - POST   /api/frp/cloud/pair-code → new OverDrive Cloud pairing code → {pairCode, pairUrl}
  * - GET    /api/frp/cloud/links     → Google accounts linked to this car
  * - POST   /api/frp/cloud/links/revoke {"id"} → cut one account off
@@ -37,10 +34,6 @@ public class FrpApiHandler {
 
         if (p.equals("/api/frp") && method.equals("GET")) {
             handleGet(out);
-            return true;
-        }
-        if (p.equals("/api/frp/config") && method.equals("POST")) {
-            handleSave(out, body);
             return true;
         }
         if (p.equals("/api/frp/cloud/enroll") && method.equals("POST")) {
@@ -95,15 +88,6 @@ public class FrpApiHandler {
             }
             return true;
         }
-        if (p.equals("/api/frp/config") && method.equals("DELETE")) {
-            if (FrpStore.delete()) {
-                logger.info("FRP tunnel settings deleted");
-                HttpResponse.sendJsonNoCors(out, "{\"success\":true}");
-            } else {
-                sendError(out, 500, "could not delete the FRP settings");
-            }
-            return true;
-        }
         return false;
     }
 
@@ -112,63 +96,12 @@ public class FrpApiHandler {
         boolean running = FrpStore.isRunning();
         JSONObject r = new JSONObject();
         r.put("configured", FrpStore.hasConfig());
-        // "cloud" (OverDrive Cloud enrollment), "manual" (own frps) or "none"
-        r.put("mode", FrpStore.readCloud() != null ? "cloud" : FrpStore.hasConfig() ? "manual" : "none");
+        // "cloud" (OverDrive Cloud enrollment) or "none"
+        r.put("mode", FrpStore.readCloud() != null ? "cloud" : "none");
         r.put("summary", summary != null ? summary : JSONObject.NULL);
         r.put("running", running);
         r.put("state", running ? FrpStore.connectionState() : "stopped");
         HttpResponse.sendJsonNoCors(out, r.toString());
-    }
-
-    private static void handleSave(OutputStream out, String body) throws Exception {
-        FrpConfig config;
-        try {
-            JSONObject json = new JSONObject(body);
-            String token = json.optString("token", "").trim();
-            if (token.isEmpty()) {
-                // keep the stored token: only the non-secret fields changed
-                token = storedToken();
-                if (token == null) throw new IllegalArgumentException("token required");
-            }
-            config = FrpConfig.of(
-                    json.optString("serverAddr", ""),
-                    json.optInt("serverPort", 443),
-                    token,
-                    json.optString("domain", ""));
-        } catch (IllegalArgumentException e) {
-            sendError(out, 400, e.getMessage());
-            return;
-        } catch (Exception e) {
-            sendError(out, 400, "invalid request");
-            return;
-        }
-        try {
-            FrpStore.save(config);
-            logger.info("FRP tunnel settings saved (server " + config.serverAddr + ":" + config.serverPort
-                    + ", domain " + config.domain + ")");
-            HttpResponse.sendJsonNoCors(out, new JSONObject()
-                    .put("success", true).put("summary", config.summaryJson()).toString());
-        } catch (Exception e) {
-            logger.error("FRP settings save failed: " + e.getMessage());
-            sendError(out, 500, "could not save the FRP settings");
-        }
-    }
-
-    /** The token in the stored frpc.toml, or null. */
-    private static String storedToken() {
-        try {
-            java.io.File f = new java.io.File(com.overdrive.app.frp.FrpPaths.CONFIG);
-            if (!f.isFile() || f.length() > 16 * 1024) return null;
-            for (String line : new String(java.nio.file.Files.readAllBytes(f.toPath()),
-                    java.nio.charset.StandardCharsets.UTF_8).split("\n")) {
-                String l = line.trim();
-                if (l.startsWith("auth.token = \"") && l.endsWith("\"")) {
-                    return l.substring("auth.token = \"".length(), l.length() - 1);
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        return null;
     }
 
     private static void sendError(OutputStream out, int status, String message) throws Exception {

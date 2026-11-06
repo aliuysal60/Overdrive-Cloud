@@ -11,10 +11,10 @@ import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Reads and writes the FRP tunnel settings for the web API. Runs inside the camera daemon (uid
- * 2000), which owns the scratch root. The rendered frpc.toml holds the frps token and is written
- * 0600 and swapped in atomically; a separate summary (server, domain, URL) is world-readable for the
- * app. A running frpc picks up new settings when the launcher restarts it.
+ * Reads and writes the OverDrive Cloud tunnel settings. Runs inside the camera daemon (uid 2000),
+ * which owns the scratch root. The enrollment and the rendered frpc.toml hold the car's secret and
+ * are written 0600 and swapped in atomically; a separate summary (URL, pairing code) is
+ * world-readable for the app. A running frpc picks up new settings when the launcher restarts it.
  */
 public final class FrpStore {
     /** frpc log lines that tell the connection state (latest wins). */
@@ -24,15 +24,6 @@ public final class FrpStore {
     };
 
     private FrpStore() {}
-
-    /** Manual mode (the user's own frps). Leaves cloud mode: its enrollment file is removed. */
-    public static synchronized FrpConfig save(FrpConfig config) throws IOException {
-        ensureHome();
-        writeAtomically(FrpPaths.CONFIG, config.toToml(), 0600);
-        writeAtomically(FrpPaths.SUMMARY, config.summaryJson().toString(), 0644);
-        new File(FrpPaths.CLOUD).delete();
-        return config;
-    }
 
     /** Cloud mode: the enrollment (0600) and the frpc settings derived from it. */
     public static synchronized CloudConfig saveCloud(CloudConfig cloud) throws IOException {
@@ -62,8 +53,11 @@ public final class FrpStore {
         }
     }
 
-    /** Settings exist but are not a cloud enrollment: the user runs their own frps. */
-    public static boolean isManualMode() {
+    /**
+     * frpc settings without a cloud enrollment: left by the removed self-hosted frps mode, and
+     * holding that server's shared token.
+     */
+    public static boolean hasLegacyManualSettings() {
         return hasConfig() && !new File(FrpPaths.CLOUD).isFile();
     }
 

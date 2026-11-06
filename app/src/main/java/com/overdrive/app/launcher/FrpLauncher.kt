@@ -13,8 +13,8 @@ import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 
 /**
- * Runs frpc (upstream fatedier/frp, android_arm64) against the user's own frps, publishing the
- * dashboard (127.0.0.1:8080) as an HTTP vhost. Settings and the frps token live in
+ * Runs frpc (upstream fatedier/frp, android_arm64) against OverDrive Cloud's frps, publishing the
+ * dashboard (127.0.0.1:8080) as an HTTP vhost. Settings and the car's cloud secret live in
  * [FrpPaths.CONFIG] (0600, written by the camera daemon); nothing secret passes through here.
  *
  * frpc retries by itself (`loginFailExit = false`); [FrpPaths.RUN_SCRIPT] restarts it if it exits
@@ -204,12 +204,12 @@ class FrpLauncher(
     }
 
     /**
-     * "cloud" (OverDrive Cloud enrollment), "manual" (the user's own frps) or "none"; null when the
-     * probe failed. Only file existence is checked: both files stay 0600.
+     * "cloud" (OverDrive Cloud enrollment) or "none"; null when the probe failed. Only file
+     * existence is checked: the file stays 0600.
      */
     fun tunnelMode(callback: (String?) -> Unit) {
         adbShellExecutor.execute(
-            command = "if [ -f ${FrpPaths.CLOUD} ]; then echo cloud; elif [ -f ${FrpPaths.CONFIG} ]; then echo manual; else echo none; fi",
+            command = "if [ -f ${FrpPaths.CLOUD} ]; then echo cloud; else echo none; fi",
             callback = object : AdbShellExecutor.ShellCallback {
                 override fun onSuccess(output: String) = callback(output.trim().lineSequence().lastOrNull())
                 override fun onError(error: String) = callback(null)

@@ -16,8 +16,8 @@ import java.nio.charset.StandardCharsets;
 /**
  * Runs in the camera daemon (uid 2000, owner of the scratch root). On first start the car enrolls
  * itself with the gateway — no account or invite needed — and stores the result via
- * {@link FrpStore#saveCloud}; frpc then connects with that identity. Settings for the user's own
- * frps (manual mode) are never replaced automatically.
+ * {@link FrpStore#saveCloud}; frpc then connects with that identity. OverDrive Cloud is the only
+ * tunnel: settings left by the removed self-hosted frps mode are deleted and the car enrolls.
  */
 public final class CloudEnrollment {
     private static final DaemonLogger logger = DaemonLogger.getInstance("CloudEnrollment");
@@ -50,8 +50,8 @@ public final class CloudEnrollment {
     }
 
     /**
-     * True when nothing is left to do: enrolled now or before, or manual FRP settings are in use.
-     * Throws on network or gateway errors (the caller retries).
+     * True when nothing is left to do: enrolled now or before. Throws on network or gateway
+     * errors (the caller retries).
      */
     public static synchronized boolean ensureEnrolled() throws IOException {
         CloudConfig enrolled = FrpStore.readCloud();
@@ -60,9 +60,10 @@ public final class CloudEnrollment {
             FrpStore.refreshCloudToml(enrolled);
             return true;
         }
-        if (FrpStore.isManualMode()) {
-            logger.info("Own FRP server configured; cloud enrollment skipped");
-            return true;
+        if (FrpStore.hasLegacyManualSettings()) {
+            // the self-hosted frps mode is gone: its settings (with the shared frps token) go
+            if (!FrpStore.delete()) throw new IOException("could not remove the own-server settings");
+            logger.info("Removed the old own-server FRP settings; enrolling with OverDrive Cloud");
         }
         String gateway = CloudConfig.DEFAULT_GATEWAY;
         JSONObject reply = request("POST", gateway + "/gw/api/car/enroll", "{}", null, 201);
@@ -73,12 +74,10 @@ public final class CloudEnrollment {
     }
 
     /**
-     * Leaves the user's own frps for OverDrive Cloud: drops the manual settings and enrolls now.
-     * Throws on network/gateway errors (the manual settings are already gone then; the background
-     * loop is not running, so the caller may simply retry).
+     * Enrolls now (the FRP card, when the background loop hasn't managed yet). Throws on
+     * network/gateway errors; the caller may simply retry.
      */
     public static synchronized CloudConfig switchToCloud() throws IOException {
-        if (FrpStore.isManualMode() && !FrpStore.delete()) throw new IOException("could not remove the own-server settings");
         ensureEnrolled();
         CloudConfig cloud = FrpStore.readCloud();
         if (cloud == null) throw new IOException("enrollment did not complete");

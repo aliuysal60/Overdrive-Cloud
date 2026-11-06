@@ -1,4 +1,4 @@
-// CloudAccessDialog.kt — OverDrive Cloud: pairing QR + code, connection state, renew code, leave for own frps
+// CloudAccessDialog.kt — OverDrive Cloud: pairing QR + code, connection state, renew code, linked accounts
 package com.overdrive.app.ui.daemon
 
 import android.app.Activity
@@ -52,11 +52,9 @@ class CloudAccessDialog private constructor(
             .setView(view)
             .setPositiveButton(R.string.action_close, null)
             .setNeutralButton(R.string.cloud_rotate, null)
-            .setNegativeButton(R.string.cloud_own_server, null)
             .create()
         dialog.show()
         dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener { confirmRotate() }
-        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener { confirmOwnServer() }
         render()
         loadAccounts()
     }
@@ -181,17 +179,6 @@ class CloudAccessDialog private constructor(
                 toast(context.getString(R.string.cloud_rotated))
             }
         }.start()
-    }
-
-    private fun confirmOwnServer() {
-        MaterialAlertDialogBuilder(context, R.style.Theme_Overdrive_M3_Dialog)
-            .setMessage(R.string.cloud_own_server_confirm)
-            .setPositiveButton(R.string.cloud_own_server) { _, _ ->
-                dialog.dismiss()
-                FrpSettingsDialog.showManual(context, daemonsViewModel)
-            }
-            .setNegativeButton(R.string.action_cancel, null)
-            .show()
     }
 
     private fun toast(text: String) {

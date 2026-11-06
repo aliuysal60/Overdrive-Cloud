@@ -43,8 +43,13 @@ public class TunnelDaemonSettingsMappingContractTest {
 
         String frp = read(
                 "app/src/main/java/com/overdrive/app/ui/daemon/FrpSettingsDialog.kt");
+        // FRP runs only through OverDrive Cloud: its card opens the cloud dialog
         assertTrue(frp.contains(
-                "inflate(R.layout.dialog_frp_settings, null)"));
+                "CloudAccessDialog.show(context, daemonsViewModel, result)"));
+        String cloud = read(
+                "app/src/main/java/com/overdrive/app/ui/daemon/CloudAccessDialog.kt");
+        assertTrue(cloud.contains(
+                "inflate(R.layout.dialog_cloud_access, null)"));
 
         String cloudflare = read(
                 "app/src/main/java/com/overdrive/app/config/CloudflaredPaidConfig.kt");

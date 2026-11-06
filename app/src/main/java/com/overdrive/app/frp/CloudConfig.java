@@ -151,7 +151,7 @@ public final class CloudConfig {
                 + "requestHeaders.set.x-forwarded-proto = \"https\"\n";
     }
 
-    /** Non-secret summary for the app (same file the manual mode writes, plus mode/pairing). */
+    /** Non-secret summary for the app: mode, public URL and pairing code. */
     public JSONObject summaryJson() {
         try {
             return new JSONObject()

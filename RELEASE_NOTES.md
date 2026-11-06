@@ -2,6 +2,10 @@
 
 BYD Tang ve Sealion 7 (DiLink 5, 51.1.x) için hazırlanan OverDrive sürümlerinin notları.
 
+## 57.0.13 — 2026-11-06
+
+- OverDrive Bulut tek tünel: eski "kendi frps sunucun" modu (elle sunucu ve token girilen ayar ekranı, "Kendi sunucum" düğmesi) kaldırıldı. Bu ayarı taşıyan bir araç güncellemeden sonra ayarı siler ve OverDrive Bulut'a kendiliğinden kaydolur; FRP kartı kayıt yoksa kaydı hemen başlatır
+
 ## 57.0.12 — 2026-11-05
 
 - Mağaza kurulumları (Play Mağazası ve Uygulama Mağazası): Chrome, Angry Birds 2 gibi büyük uygulamaların "kuruluyor"da takılı kalması düzeltildi. APK'lar ADB bağlantısı üzerinden akıtılırken araçta zaman zaman yarıda durup bir daha devam etmiyordu; artık Android dosyaları doğrudan diskten okuyor, aktarım saniyeler sürüyor. Yarım kalan kurulum geride oturum bırakmıyor

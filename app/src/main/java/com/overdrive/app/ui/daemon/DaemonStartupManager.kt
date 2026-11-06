@@ -1042,26 +1042,19 @@ class DaemonStartupManager(
      * enabled — once: a later "off" from the user sticks. Runs `then` afterwards either way.
      */
     private fun autoEnableCloudTunnel(then: () -> Unit) {
-        if (PreferencesManager.isFrpCloudAutoEnabled() || ownFrpServerSeen) {
+        if (PreferencesManager.isFrpCloudAutoEnabled()) {
             then()
             return
         }
         FrpLauncher(context, adbLauncher.adbShellExecutor, log).tunnelMode { mode ->
-            when (mode) {
-                "cloud" -> {
-                    log.info(TAG, "OverDrive Cloud enrollment found - enabling the FRP tunnel")
-                    PreferencesManager.setDaemonEnabled(DaemonType.FRP_TUNNEL, true)
-                    PreferencesManager.setFrpCloudAutoEnabled()
-                }
-                // own frps: the daemon never enrolls, so stop asking for this process lifetime
-                "manual" -> ownFrpServerSeen = true
+            if (mode == "cloud") {
+                log.info(TAG, "OverDrive Cloud enrollment found - enabling the FRP tunnel")
+                PreferencesManager.setDaemonEnabled(DaemonType.FRP_TUNNEL, true)
+                PreferencesManager.setFrpCloudAutoEnabled()
             }
             then()
         }
     }
-
-    @Volatile
-    private var ownFrpServerSeen = false
 
     private fun ifFrpConfigured(action: () -> Unit) {
         FrpLauncher(context, adbLauncher.adbShellExecutor, log).hasConfig { configured ->

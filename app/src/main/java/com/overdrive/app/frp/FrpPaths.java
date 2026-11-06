@@ -6,8 +6,8 @@ import com.overdrive.app.util.ScratchRoot;
 /**
  * File locations and constants shared by the FRP launcher, store and controller.
  *
- * <p>Permissions: HOME 0711, CONFIG 0600 (holds the frps auth token), SUMMARY 0644 (server and
- * domain only, never the token), RUN_SCRIPT 0755.
+ * <p>Permissions: HOME 0711, CONFIG 0600 (holds the car's cloud secret), CLOUD 0600, SUMMARY 0644
+ * (URL and pairing code only, never the secret), RUN_SCRIPT 0755.
  *
  * <p>The binary is installed as {@link #PROCESS_NAME} and the restart loop lives in its own script
  * file, so the loop's command line ({@code sh …/.frp/run.sh}) never contains the process name: the

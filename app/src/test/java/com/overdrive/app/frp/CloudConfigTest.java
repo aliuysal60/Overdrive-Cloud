@@ -77,6 +77,33 @@ public class CloudConfigTest {
     }
 
     @Test
+    public void tomlReportsTheHeadUnitVersionsButNeverTheVin() throws Exception {
+        CloudConfig c = CloudConfig.fromEnrollResponse(GW, reply());
+        java.util.Map<String, String> system = new java.util.HashMap<>();
+        system.put("firmware", "2602 (eng.scm.20260205.200752)");
+        system.put("dsp", "DSP_V1.2");
+        system.put("android", "11 (API 30)");
+        system.put("securityPatch", "2021-10-01");
+        system.put("headUnit", "BYD Auto / BYD AUTO / DX_BYD_AUTO");
+        system.put("vin", "LGXC74C40R0123456");
+        system.put("mcu", "  ");
+        String toml = c.toToml("57.0.16", 5700016L, "tang", system);
+        assertTrue(toml.contains("metadatas.sysFirmware = \"2602 (eng.scm.20260205.200752)\"\n"));
+        assertTrue(toml.contains("metadatas.sysDsp = \"DSP_V1.2\"\n"));
+        assertTrue(toml.contains("metadatas.sysAndroid = \"11 (API 30)\"\n"));
+        assertTrue(toml.contains("metadatas.sysPatch = \"2021-10-01\"\n"));
+        assertTrue(toml.contains("metadatas.sysUnit = \"BYD Auto / BYD AUTO / DX_BYD_AUTO\"\n"));
+        assertFalse("an empty value is left out", toml.contains("sysMcu"));
+        assertFalse("never the VIN", toml.contains("LGXC74C40R0123456"));
+        // nothing can break out of the TOML string, and values stay short
+        system.put("dsp", "x\"\ny = \"1\\");
+        system.put("firmware", "A".repeat(200));
+        String hostile = c.toToml("57.0.16", 5700016L, "", system);
+        assertTrue(hostile.contains("metadatas.sysDsp = \"xy 1\"\n"));
+        assertTrue(hostile.contains("metadatas.sysFirmware = \"" + "A".repeat(64) + "\"\n"));
+    }
+
+    @Test
     public void summaryPointsAtTheGatewayAndCarriesNoSecret() throws Exception {
         JSONObject s = CloudConfig.fromEnrollResponse(GW, reply()).summaryJson();
         assertEquals("cloud", s.getString("mode"));

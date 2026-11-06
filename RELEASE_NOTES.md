@@ -2,6 +2,10 @@
 
 BYD Tang ve Sealion 7 (DiLink 5, 51.1.x) için hazırlanan OverDrive sürümlerinin notları.
 
+## 57.0.16 — 2026-11-06
+
+- OverDrive Bulut: araç, Hakkında ekranındaki sistem bilgilerini (yazılım, DSP, MCU, Android sürümü, güvenlik yaması, ünite) de buluta bildirir; VIN gönderilmez
+
 ## 57.0.15 — 2026-11-06
 
 - OverDrive Bulut: araç, Ayarlar'da seçili araç modelini (seçilmemişse boş) uygulama sürümüyle birlikte buluta bildirir

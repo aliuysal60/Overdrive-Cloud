@@ -134,11 +134,11 @@ What the cloud stores: your Google account id, email, name and picture URL; the 
 
 Install and update the apps you want **without downgrading the car's firmware and without enabling ADB or developer options**. The car app's side menu has two stores that work like the ones on your phone: pick an app and OverDrive installs it the same way it installs its own updates — no confirmation screen, no "unknown sources" setting, no computer.
 
-| | **App Store (F-Droid)** | **Play Store** |
+| | **Play Store** | **App Store (F-Droid)** |
 |---|---|---|
-| Apps | Free, open-source apps from F-Droid and IzzyOnDroid (VLC, maps, music players…) | Apps from Google Play |
-| Client | [Droid-ify](https://github.com/aliuysal60/droid_ify_client) built for OverDrive (`com.overdrive.store`) | [Aurora Store](https://github.com/aliuysal60/AuroraStore) built for OverDrive (`com.overdrive.aurora`) |
-| Notes | Nothing to set up: the app list refreshes on mobile data too and installed APKs are deleted. Updates arrive as a notification and install with one tap; automatic updates can be turned on. | Sign in with your Google account or anonymously. Split APKs install, update and uninstall too. Apps that need Google Play Services (e.g. the official YouTube) may install but not run if the unit lacks those services. |
+| Apps | Apps from Google Play | Free, open-source apps from F-Droid and IzzyOnDroid (VLC, maps, music players…) |
+| Client | [Aurora Store](https://github.com/aliuysal60/AuroraStore) built for OverDrive (`com.overdrive.aurora`) | [Droid-ify](https://github.com/aliuysal60/droid_ify_client) built for OverDrive (`com.overdrive.store`) |
+| Notes | Sign in with your Google account or anonymously. Split APKs install, update and uninstall too. Apps that need Google Play Services (e.g. the official YouTube) may install but not run if the unit lacks those services. | Nothing to set up: the app list refreshes on mobile data too and installed APKs are deleted. Updates arrive as a notification and install with one tap; automatic updates can be turned on. |
 
 **How it works:** on the first tap of a menu row, OverDrive downloads that store's latest release from GitHub, checks it against the SHA-256 GitHub publishes and installs it; when a store has a new release, it is updated before it opens. The store hands each APK to OverDrive, which streams it to the package manager over its ADB connection (like `adb install -r`), under the same install lock as OverDrive's own updates. Only stores signed with OverDrive's release key can make that request (a `signature`-level permission), and OverDrive itself, the stores and system apps are refused.
 

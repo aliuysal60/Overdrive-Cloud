@@ -65,6 +65,18 @@ public class CloudConfigTest {
     }
 
     @Test
+    public void tomlReportsTheSelectedModelOrNothing() throws Exception {
+        CloudConfig c = CloudConfig.fromEnrollResponse(GW, reply());
+        assertTrue(c.toToml("57.0.15", 5700015L, "tang").contains("metadatas.modelId = \"tang\"\n"));
+        assertTrue(c.toToml("57.0.15", 5700015L, " Sealion7 ").contains("metadatas.modelId = \"sealion7\"\n"));
+        // no model chosen: an empty value, which the gateway shows as unknown
+        assertTrue(c.toToml("57.0.15", 5700015L, "").contains("metadatas.modelId = \"\"\n"));
+        // a model id can never break out of the TOML string
+        assertTrue(c.toToml("57.0.15", 5700015L, "x\"\ny = \"1").contains("metadatas.modelId = \"\"\n"));
+        assertTrue(c.toToml("57.0.15", 5700015L, null).contains("metadatas.modelId = \"\"\n"));
+    }
+
+    @Test
     public void summaryPointsAtTheGatewayAndCarriesNoSecret() throws Exception {
         JSONObject s = CloudConfig.fromEnrollResponse(GW, reply()).summaryJson();
         assertEquals("cloud", s.getString("mode"));

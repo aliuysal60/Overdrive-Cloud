@@ -2,6 +2,10 @@
 
 BYD Tang ve Sealion 7 (DiLink 5, 51.1.x) için hazırlanan OverDrive sürümlerinin notları.
 
+## 57.0.15 — 2026-11-06
+
+- OverDrive Bulut: araç, Ayarlar'da seçili araç modelini (seçilmemişse boş) uygulama sürümüyle birlikte buluta bildirir
+
 ## 57.0.14 — 2026-11-06
 
 - OverDrive Bulut eşleştirme kodu artık 15 dakika geçerli ve tek kullanımlık: ekranın fotoğrafı ya da eski bir ekran görüntüsüyle sonradan hesap eklenemez. Araçtaki OverDrive Bulut penceresi ve ana paneldeki uzaktan erişim bölümü her açıldığında yeni kod alır; başka bir hesap eklemek için pencereyi yeniden açmanız yeterli

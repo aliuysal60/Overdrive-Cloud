@@ -2,6 +2,10 @@
 
 BYD Tang ve Sealion 7 (DiLink 5, 51.1.x) için hazırlanan OverDrive sürümlerinin notları.
 
+## 57.0.18 — 2026-11-06
+
+- 57.0.17'de araç ekranında uygulamanın açılır açılmaz kapanması düzeltildi: yeni "OverDrive hazırlanıyor" bandı yalnızca dikey ekran düzenine eklenmişti, araç ise yatay düzeni kullanıyor. Bant artık araç ekranında da görünür; kontrol panelindeki web giriş kodu açıklaması da yatay ekrana eklendi
+
 ## 57.0.17 — 2026-11-06
 
 - Telefon kaydı (OverDrive Bulut eşleştirmesi) düzeltildi: kontrol paneli artık süresi dolmuş kodu göstermiyor. Araç açılıp bulut bağlanır bağlanmaz bölüm açıldığında yeni kod istenmiyor ve eski kod okutulunca "Bu koda ait araç bulunamadı" hatası alınıyordu; şimdi QR her görünür olduğunda yeni kod alınır, gelene kadar "Yeni eşleştirme kodu alınıyor…" yazar, açık kaldıkça 10 dakikada bir yenilenir

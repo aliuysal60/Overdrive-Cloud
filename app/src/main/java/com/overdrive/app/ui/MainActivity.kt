@@ -193,6 +193,23 @@ open class MainActivity : AppCompatActivity() {
     private lateinit var btnCopyUrl: ImageButton
     private var screenshotPrivacyController: ScreenshotPrivacyController? = null
     
+    /**
+     * The "OverDrive is getting ready" strip. Every layout variant (portrait and layout-land) must
+     * carry its views; if one doesn't, the app runs without the strip rather than crashing at start.
+     */
+    private fun bindStartupBanner() {
+        val root = findViewById<android.view.View?>(R.id.startupBanner)
+        val progress = findViewById<com.google.android.material.progressindicator.CircularProgressIndicator?>(R.id.startupBannerProgress)
+        val title = findViewById<android.widget.TextView?>(R.id.startupBannerTitle)
+        val text = findViewById<android.widget.TextView?>(R.id.startupBannerText)
+        val close = findViewById<com.google.android.material.button.MaterialButton?>(R.id.startupBannerClose)
+        if (root == null || progress == null || title == null || text == null || close == null) {
+            android.util.Log.w("MainActivity", "startup banner views missing in this layout; running without it")
+            return
+        }
+        com.overdrive.app.ui.daemon.StartupBanner(root, progress, title, text, close).bind(this, daemonsViewModel)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -333,13 +350,7 @@ open class MainActivity : AppCompatActivity() {
         // Initialize daemon startup manager
         daemonStartupManager = DaemonStartupManager(this, daemonsViewModel)
         daemonsViewModel.setStartupManager(daemonStartupManager)
-        com.overdrive.app.ui.daemon.StartupBanner(
-            findViewById(R.id.startupBanner),
-            findViewById(R.id.startupBannerProgress),
-            findViewById(R.id.startupBannerTitle),
-            findViewById(R.id.startupBannerText),
-            findViewById(R.id.startupBannerClose),
-        ).bind(this, daemonsViewModel)
+        bindStartupBanner()
         
         // Setup ADB auth callback to re-initialize when auth is granted
         if (!remoteDevSession) setupAdbAuthCallback()

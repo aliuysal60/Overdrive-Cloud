@@ -394,6 +394,71 @@
                     android:background="?attr/colorOutlineVariant" />
             </com.google.android.material.appbar.AppBarLayout>
 
+            <!-- "OverDrive is getting ready" strip: shown on every screen until the start-up
+                 services run (StartupBanner) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/startupBanner"
+                style="@style/Widget.Material3.CardView.Filled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginEnd="12dp"
+                android:layout_marginBottom="4dp"
+                android:visibility="gone"
+                app:cardBackgroundColor="?attr/colorSecondaryContainer">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="16dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="10dp">
+
+                    <com.google.android.material.progressindicator.CircularProgressIndicator
+                        android:id="@+id/startupBannerProgress"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:indeterminate="true"
+                        app:indicatorSize="28dp"
+                        app:trackThickness="3dp" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="14dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/startupBannerTitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
+                            android:textColor="?attr/colorOnSecondaryContainer" />
+
+                        <TextView
+                            android:id="@+id/startupBannerText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                            android:textColor="?attr/colorOnSecondaryContainer" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/startupBannerClose"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/action_close"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <androidx.fragment.app.FragmentContainerView
                 android:id="@+id/navHostFragment"
                 android:name="androidx.navigation.fragment.NavHostFragment"

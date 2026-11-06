@@ -57,6 +57,23 @@ class CloudAccessDialog private constructor(
         dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener { confirmRotate() }
         render()
         loadAccounts()
+        // codes live 15 minutes and die on first use: the stored one is probably dead, get a new one
+        if (hasCode()) {
+            showFetching()
+            rotate(silent = true)
+        }
+    }
+
+    private fun hasCode(): Boolean {
+        val summary = reply.optJSONObject("summary") ?: return false
+        return summary.optString("pairCode").isNotEmpty() && summary.optString("pairUrl").isNotEmpty()
+    }
+
+    /** No QR until the fresh code arrives, so nobody scans an expired one. */
+    private fun showFetching() {
+        code.text = ""
+        qr.setImageDrawable(null)
+        status.text = context.getString(R.string.cloud_code_fetching)
     }
 
     /** Fills the "accounts with access" list from the gateway (through the daemon). */
@@ -143,6 +160,7 @@ class CloudAccessDialog private constructor(
         }
         code.text = pairCode
         qr.setImageBitmap(QrCodeGenerator.generate(pairUrl, 600))
+        intro.text = intro.text.toString() + "\n" + context.getString(R.string.cloud_code_validity)
         status.text = context.getString(R.string.frp_status_line, describeState(reply))
     }
 
@@ -156,12 +174,13 @@ class CloudAccessDialog private constructor(
     private fun confirmRotate() {
         MaterialAlertDialogBuilder(context, R.style.Theme_Overdrive_M3_Dialog)
             .setMessage(R.string.cloud_rotate_confirm)
-            .setPositiveButton(R.string.cloud_rotate) { _, _ -> rotate() }
+            .setPositiveButton(R.string.cloud_rotate) { _, _ -> rotate(silent = false) }
             .setNegativeButton(R.string.action_cancel, null)
             .show()
     }
 
-    private fun rotate() {
+    /** New pairing code from the gateway; [silent] is the automatic one when the window opens. */
+    private fun rotate(silent: Boolean) {
         val button = dialog.getButton(AlertDialog.BUTTON_NEUTRAL)
         button.isEnabled = false
         Thread {
@@ -171,12 +190,13 @@ class CloudAccessDialog private constructor(
                 button.isEnabled = true
                 if (!dialog.isShowing) return@post
                 if (fresh == null) {
-                    toast(context.getString(R.string.cloud_rotate_failed))
+                    if (silent) status.text = context.getString(R.string.cloud_rotate_failed)
+                    else toast(context.getString(R.string.cloud_rotate_failed))
                     return@post
                 }
                 reply = fresh
                 render()
-                toast(context.getString(R.string.cloud_rotated))
+                if (!silent) toast(context.getString(R.string.cloud_rotated))
             }
         }.start()
     }

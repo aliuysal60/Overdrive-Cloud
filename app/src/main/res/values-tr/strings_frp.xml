@@ -27,4 +27,6 @@
     <string name="cloud_account_remove">Erişimi kaldır</string>
     <string name="cloud_account_remove_confirm">%1$s bu araca erişemesin mi? Tekrar eklemek için güncel kod gerekir.</string>
     <string name="cloud_account_removed">Erişim kaldırıldı</string>
+    <string name="cloud_code_fetching">Yeni kod alınıyor…</string>
+    <string name="cloud_code_validity">Kod 15 dakika geçerli ve tek kullanımlık. Başka bir hesap eklemek için bu pencereyi yeniden açın.</string>
 </resources>

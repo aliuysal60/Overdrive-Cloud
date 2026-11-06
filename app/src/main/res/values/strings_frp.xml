@@ -27,4 +27,6 @@
     <string name="cloud_account_remove">Remove access</string>
     <string name="cloud_account_remove_confirm">Remove access for %1$s? Adding the car again needs the current code.</string>
     <string name="cloud_account_removed">Access removed</string>
+    <string name="cloud_code_fetching">Getting a new code…</string>
+    <string name="cloud_code_validity">The code is valid for 15 minutes and works once. To add another account, open this window again.</string>
 </resources>

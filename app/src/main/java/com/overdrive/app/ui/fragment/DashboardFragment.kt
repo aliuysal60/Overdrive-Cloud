@@ -383,6 +383,7 @@ class DashboardFragment : Fragment() {
                 !dashboardState.remoteExpanded,
             )
             renderRemoteExpansion()
+            if (dashboardState.remoteExpanded) refreshCloudPairingCode()
         }
         metricVehicle?.setOnClickListener { showVehicleCapacityDialog() }
 
@@ -1174,6 +1175,7 @@ class DashboardFragment : Fragment() {
                 if (type != selectedTunnel) {
                     selectedTunnel = type
                     renderQr(qrUrlFor(type))
+                    if (type == DaemonType.FRP_TUNNEL) refreshCloudPairingCode()
                 }
             }
         }
@@ -1239,6 +1241,21 @@ class DashboardFragment : Fragment() {
         DaemonType.TAILSCALE_TUNNEL -> getString(R.string.tunnel_label_tailscale)
         DaemonType.FRP_TUNNEL -> getString(R.string.tunnel_label_frp)
         else -> type.localizedName(requireContext())
+    }
+
+    /**
+     * OverDrive Cloud pairing codes live 15 minutes and die on first use, so the stored one shown
+     * under the QR is usually dead: ask for a new one whenever the remote section comes into view.
+     * The fresh summary reaches the QR through the cloudPairing observer.
+     */
+    private fun refreshCloudPairingCode() {
+        val frp = daemonsViewModel.frpController
+        if (frp.cloudPairing.value == null) return
+        Thread {
+            val ok = com.overdrive.app.ui.daemon.FrpDaemonApi
+                .request("POST", "/api/frp/cloud/pair-code", "{}")?.first in 200..299
+            if (ok) frp.refreshTunnelUrl()
+        }.start()
     }
 
     private fun renderQr(url: String?) {

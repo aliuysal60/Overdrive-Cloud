@@ -2,6 +2,11 @@
 
 BYD Tang ve Sealion 7 (DiLink 5, 51.1.x) için hazırlanan OverDrive sürümlerinin notları.
 
+## 57.0.14 — 2026-11-06
+
+- OverDrive Bulut eşleştirme kodu artık 15 dakika geçerli ve tek kullanımlık: ekranın fotoğrafı ya da eski bir ekran görüntüsüyle sonradan hesap eklenemez. Araçtaki OverDrive Bulut penceresi ve ana paneldeki uzaktan erişim bölümü her açıldığında yeni kod alır; başka bir hesap eklemek için pencereyi yeniden açmanız yeterli
+- Araca yeni bir hesap eklendiğinde, o araca zaten bağlı hesapların telefonlarına bildirim gider
+
 ## 57.0.13 — 2026-11-06
 
 - OverDrive Bulut tek tünel: eski "kendi frps sunucun" modu (elle sunucu ve token girilen ayar ekranı, "Kendi sunucum" düğmesi) kaldırıldı. Bu ayarı taşıyan bir araç güncellemeden sonra ayarı siler ve OverDrive Bulut'a kendiliğinden kaydolur; FRP kartı kayıt yoksa kaydı hemen başlatır

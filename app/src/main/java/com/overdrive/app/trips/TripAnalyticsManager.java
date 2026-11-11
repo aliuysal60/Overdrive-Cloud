@@ -176,18 +176,44 @@ public class TripAnalyticsManager {
 
         // Safety net: probe current gear in case we missed the gear change event
         // during the ACC OFF→ON transition
+        probeLiveGear("ACC ON");
+    }
+
+    /**
+     * Called by CameraDaemon right after this manager becomes reachable.
+     *
+     * The daemons come up ~45 s after the car starts. A driver who shifts into D
+     * before that has GearMonitor report D while the trip database is still
+     * opening, and that one notification is dropped (no manager yet). ACC was
+     * already ON when the daemon started, so no ACC-ON edge follows, and the gear
+     * stays D, so no further gear notification follows either: the trip never
+     * started until the user tapped the widget. Read the live gear now instead.
+     * If GearMonitor has not started yet, its own initial notification reaches
+     * this (now published) manager, so either order ends in a started trip.
+     */
+    public void onPublished() {
+        if (!enabled) return;
+        probeLiveGear("start-up");
+    }
+
+    /** Start a trip when the car is already in a driving gear and none is running. */
+    private void probeLiveGear(String reason) {
         try {
             int currentGear = GearMonitor.getInstance().getCurrentGear();
-            if (GearMonitor.isValidGearMode(currentGear)
-                    && currentGear != GearMonitor.GEAR_P
-                    && detector != null && !detector.isTripActive()) {
-                logger.info("ACC ON + gear already " + GearMonitor.gearToString(currentGear)
+            TripDetector d = detector;
+            if (d != null && shouldStartFromLiveGear(currentGear, d.isTripActive())) {
+                logger.info(reason + " + gear already " + GearMonitor.gearToString(currentGear)
                         + " — auto-starting trip");
-                detector.onGearChanged(currentGear);
+                d.onGearChanged(currentGear);
             }
         } catch (Exception e) {
-            logger.warn("ACC ON gear probe failed: " + e.getMessage());
+            logger.warn(reason + " gear probe failed: " + e.getMessage());
         }
+    }
+
+    /** A live gear reading that should start a trip: a real, non-Park gear while no trip runs. */
+    static boolean shouldStartFromLiveGear(int gear, boolean tripActive) {
+        return !tripActive && GearMonitor.isValidGearMode(gear) && gear != GearMonitor.GEAR_P;
     }
 
     // ==================== RUNTIME CONFIG ====================

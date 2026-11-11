@@ -1282,6 +1282,15 @@ public class CameraDaemon {
                     log("Trip Analytics initialized in "
                             + (System.currentTimeMillis() - t0) + "ms (enabled="
                             + initializedEnabled + ")");
+                    // The car may already be in D: the gear notification that came
+                    // while the database was opening was dropped, and neither an
+                    // ACC-ON edge nor another gear change will follow. Probe it.
+                    try {
+                        tam.onPublished();
+                    } catch (Throwable probeFailure) {
+                        log("Trip Analytics start-up gear probe failed: "
+                                + probeFailure.getMessage());
+                    }
 
                 } catch (Exception e) {
                     log("Trip Analytics init error: " + e.getMessage());
@@ -4247,8 +4256,9 @@ public class CameraDaemon {
 
                 // Publish only after all startup dependencies are wired.
                 // A gear edge that arrived before the database finished opening
-                // is recovered by the ACC-ON gear probe in onAccOn(), and by
-                // GearMonitor's next notification.
+                // is recovered by the start-up gear probe (onPublished(), run by
+                // the init thread right after this returns), the ACC-ON probe in
+                // onAccOn(), and GearMonitor's next notification.
                 tripAnalyticsManager = manager;
                 return true;
             } catch (Exception e) {

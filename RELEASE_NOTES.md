@@ -2,6 +2,10 @@
 
 BYD Tang ve Sealion 7 (DiLink 5, 51.1.x) için hazırlanan OverDrive sürümlerinin notları.
 
+## 57.0.19 — 2026-11-11
+
+- Servisler başlamadan araç sürüş vitesine alınıp yola çıkıldığında yolculuk (trip) kaydı otomatik başlamıyor, ekrandaki TRIP düğmesiyle elle başlatmak gerekiyordu. Artık servisler açıldığında araç D/R/N/M/S vitesindeyse ve yolculuk yoksa yolculuk kendiliğinden başlar
+
 ## 57.0.18 — 2026-11-06
 
 - 57.0.17'de araç ekranında uygulamanın açılır açılmaz kapanması düzeltildi: yeni "OverDrive hazırlanıyor" bandı yalnızca dikey ekran düzenine eklenmişti, araç ise yatay düzeni kullanıyor. Bant artık araç ekranında da görünür; kontrol panelindeki web giriş kodu açıklaması da yatay ekrana eklendi
